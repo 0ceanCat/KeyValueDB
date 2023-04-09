@@ -1,26 +1,27 @@
 package writerReader
 
 import common.DBOperation
-class TableWriter: ReusableWriter {
+
+class TableWriter : Writer {
     private var id = 0
     private val basicPath = "segment"
     private var currentPath = ""
-    private lateinit var writer: DisposableWriter
-
-    init {
-        newWriter()
-    }
+    private lateinit var writer: Writer
 
     override fun write(op: DBOperation) {
         writer.write(op)
     }
 
     override fun reset() {
-        writer.finish()
-        newWriter()
+        if (::writer.isInitialized) writer.finish()
+        startWrite()
     }
 
-    private fun newWriter() {
+    override fun finish() {
+        writer.finish()
+    }
+
+    fun startWrite() {
         currentPath = "${basicPath}_$id"
         writer = GeneralWriter(currentPath)
         id++

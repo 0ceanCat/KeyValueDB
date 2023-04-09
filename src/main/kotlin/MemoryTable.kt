@@ -2,14 +2,14 @@ import common.DBOperation
 import common.OperationType
 import writerReader.TableWriter
 import writerReader.WAL
-import writerReader.ReusableWriter
+import writerReader.Writer
+import java.io.Closeable
 import java.util.TreeMap
 
-class MemoryTable {
+class MemoryTable(private val threshold: Int = 1024) : Closeable {
     private val table = TreeMap<String, DBOperation>()
-    private val threshold: Int = 1024
-    private val wal: ReusableWriter = WAL()
-    private val tableWriter: ReusableWriter = TableWriter()
+    private val wal: Writer = WAL()
+    private val tableWriter: Writer = TableWriter()
     private var size: Int = 0
 
     fun insert(key: String, v: Any) {
@@ -20,29 +20,39 @@ class MemoryTable {
         updateTable(OperationType.DELETE, key, v)
     }
 
+
     private fun updateTable(op: OperationType, key: String, v: Any) {
         val dbOperation = DBOperation(op, key, v)
-        table[key] = dbOperation
+        updateSize(key, v)
         writeWAL(dbOperation)
-        checkThreshold(key, v)
+        table[key] = dbOperation
+        checkThreshold()
     }
 
-    private fun checkThreshold(key: String, v: Any) {
-        updateSize(key, v)
+    private fun checkThreshold() {
         if (size >= threshold) {
             writeToDisc()
+            reset()
         }
-        reset()
+    }
+
+    override fun close() {
+        writeToDisc()
+        tableWriter.finish()
+        wal.finish()
     }
 
     private fun reset() {
-        tableWriter.reset()
         wal.reset()
         table.clear()
     }
 
     private fun updateSize(key: String, v: Any) {
-        size += stringSize(key)
+        if (key in table) {
+            size -= if (table[key]!!.v is Int) 4 else stringSize(table[key]!!.v as String)
+        } else {
+            size += stringSize(key)
+        }
         if (v is Int) {
             size += 4
         } else {
@@ -60,9 +70,12 @@ class MemoryTable {
     }
 
     private fun writeToDisc() {
+        println("write to disc...")
+        tableWriter.reset()
         for (entry in table) {
             tableWriter.write(entry.value)
         }
+        tableWriter.finish()
     }
 
 }

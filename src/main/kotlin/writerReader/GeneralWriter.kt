@@ -6,10 +6,19 @@ import common.OperationType
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
 
-class GeneralWriter(val path: String) : DisposableWriter {
-    private val writer: BufferedOutputStream = BufferedOutputStream(FileOutputStream(path))
+class GeneralWriter(val path: String) : Writer {
+    private val prefix = "index"
+    private val writer: BufferedOutputStream
 
+    init {
+        if (!Files.exists(Path.of(prefix))){
+            Files.createDirectory(Path.of(prefix))
+        }
+        writer = BufferedOutputStream(FileOutputStream("$prefix/$path"))
+    }
     override fun write(op: DBOperation) {
         val vType = if (op.v is Int) DataType.INT else DataType.STRING
         val keyBytes = op.k.encodeToByteArray()
@@ -19,6 +28,10 @@ class GeneralWriter(val path: String) : DisposableWriter {
         } else {
             write(op.op, vType, keyBytes.size, keyBytes, op.v as Int)
         }
+    }
+
+    override fun reset() {
+        TODO("Not yet implemented")
     }
 
     private fun writeVint(_v: Int) {
@@ -62,7 +75,6 @@ class GeneralWriter(val path: String) : DisposableWriter {
 
     override fun finish() {
         writer.close()
-        File(path).delete();
     }
 
 }

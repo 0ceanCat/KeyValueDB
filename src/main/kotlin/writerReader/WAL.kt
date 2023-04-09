@@ -2,12 +2,9 @@ package writerReader
 
 import common.DBOperation
 
-class WAL : ReusableWriter {
-    private var id = 0
-    private val basicPath = "segment"
-    private var currentPath = ""
+class WAL : Writer {
     private val path = "binlog"
-    private var writer: DisposableWriter = GeneralWriter(path)
+    private var writer: Writer = GeneralWriter(path)
 
     override fun write(op: DBOperation) {
         writer.write(op)
@@ -16,5 +13,9 @@ class WAL : ReusableWriter {
     override fun reset() {
         writer.finish()
         writer = GeneralWriter(path)
+    }
+
+    override fun finish() {
+        writer.finish()
     }
 }

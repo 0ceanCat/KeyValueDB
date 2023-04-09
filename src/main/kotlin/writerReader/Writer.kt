@@ -2,6 +2,11 @@ package writerReader
 
 import common.DBOperation
 
-interface BasicWriter {
+interface Writer {
+
     fun write(op: DBOperation)
+
+    fun reset()
+
+    fun finish()
 }

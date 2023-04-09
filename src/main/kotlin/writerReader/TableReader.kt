@@ -6,7 +6,7 @@ import common.MetaData
 import java.io.BufferedInputStream
 import java.io.FileInputStream
 
-class WALReader(path: String) : Iterable<DBOperation> {
+class TableReader(path: String) : Iterable<DBOperation> {
     val reader: BufferedInputStream
 
     init {
@@ -14,7 +14,7 @@ class WALReader(path: String) : Iterable<DBOperation> {
     }
 
     override fun iterator(): Iterator<DBOperation> {
-        TODO("Not yet implemented")
+        return Itr()
     }
 
     private inner class Itr : Iterator<DBOperation> {
@@ -33,6 +33,7 @@ class WALReader(path: String) : Iterable<DBOperation> {
 
     fun getNextOperation(): DBOperation? {
         val meta = readMeta()
+        if (meta == null) return null
         val key = readKey()
         val v: Any
         if (meta.vType == DataType.INT) {
@@ -48,14 +49,14 @@ class WALReader(path: String) : Iterable<DBOperation> {
         var readN = reader.read()
         // the highest bit indicates if there are more bytes to be read
         // so, we only need the last 7 bits
-         // 0x7f == 1111111
+        // 0x7f == 1111111
         var v = readN and 0x7f
 
         var shift = 7
         // 0x80 == 10000000
         while ((readN and 0x80) != 0) {
             readN = reader.read()
-            v= v or ((readN and 0x7F) shl shift)
+            v = v or ((readN and 0x7F) shl shift)
             shift += 7
         }
 
@@ -72,8 +73,9 @@ class WALReader(path: String) : Iterable<DBOperation> {
         return readString()
     }
 
-    private fun readMeta(): MetaData {
+    private fun readMeta(): MetaData? {
         val meta = reader.read()
+        if (meta == -1) return null
         return MetaData(meta)
     }
 }
