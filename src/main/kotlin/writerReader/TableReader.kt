@@ -1,7 +1,8 @@
-package WAL
+package writerReader
 
-import DBOperation
-import MetaData
+import common.DBOperation
+import common.DataType
+import common.MetaData
 import java.io.BufferedInputStream
 import java.io.FileInputStream
 
@@ -34,7 +35,7 @@ class WALReader(path: String) : Iterable<DBOperation> {
         val meta = readMeta()
         val key = readKey()
         val v: Any
-        if (meta.vType == 1) {
+        if (meta.vType == DataType.INT) {
             v = readInt()
             if (v == -1) return null
         } else {
@@ -44,16 +45,25 @@ class WALReader(path: String) : Iterable<DBOperation> {
     }
 
     private fun readInt(): Int {
-        val vLen = reader.read()
-        val vBytes = reader.readNBytes(vLen)
-        if (vLen != vBytes.size) return -1
-        var v = 0
-        for (vb in vBytes) v = v shl 8 or vb.toInt()
+        var readN = reader.read()
+        // the highest bit indicates if there are more bytes to be read
+        // so, we only need the last 7 bits
+         // 0x7f == 1111111
+        var v = readN and 0x7f
+
+        var shift = 7
+        // 0x80 == 10000000
+        while ((readN and 0x80) != 0) {
+            readN = reader.read()
+            v= v or ((readN and 0x7F) shl shift)
+            shift += 7
+        }
+
         return v
     }
 
     private fun readString(): String {
-        val keyLen = reader.read()
+        val keyLen = readInt()
         val keyBytes = reader.readNBytes(keyLen)
         return String(keyBytes)
     }

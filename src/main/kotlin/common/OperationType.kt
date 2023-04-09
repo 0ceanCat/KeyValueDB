@@ -1,9 +1,11 @@
+package common
+
 import java.security.InvalidParameterException
 
 enum class OperationType(val id: Int) {
-    DELETE(0x1), // 0001
-    INSERT(0x2), // 0010
-    UPDATE(0x3); // 0011
+    DELETE(0x8), // 0001000
+    INSERT(0x10), // 0010000
+    UPDATE(0x11); // 00110000
 
     companion object {
         fun of(id: Int): OperationType {

@@ -1,0 +1,4 @@
+package writerReader
+
+class IndexReader {
+}
