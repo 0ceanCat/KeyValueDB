@@ -1,21 +1,28 @@
 package writerReader
 
-import common.DBOperation
+import java.io.File
+import java.io.RandomAccessFile
 
-class WAL : Writer {
+class WAL : GeneralWriter() {
+    companion object {
+        private var id = 0
+    }
+
     private val path = "binlog"
-    private var writer: Writer = GeneralWriter(path)
-
-    override fun write(op: DBOperation) {
-        writer.write(op)
+    private var current_path = ""
+    init {
+        current_path = "${prefix}/${path}_$id"
+        writer = RandomAccessFile(current_path, "rws")
+        id++
     }
 
     override fun reset() {
-        writer.finish()
-        writer = GeneralWriter(path)
+        if (writer != null) close()
     }
 
-    override fun finish() {
-        writer.finish()
+    override fun close() {
+        super.close()
+        File(current_path).delete()
     }
+
 }

@@ -3,9 +3,10 @@ import java.io.ObjectOutput
 import java.io.ObjectOutputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.StringJoiner
 
 class Server(val port: Int = 8000) {
-    val sstable = MemoryTable(32)
+    val sstable = MemoryTable(16)
 
     inner class Worker(private val client: Socket) : Thread() {
         override fun run() {
@@ -18,7 +19,8 @@ class Server(val port: Int = 8000) {
                     if (strings[0] == "set") {
                         try {
                             val key = strings[1]
-                            val v = strings[2].toIntOrNull() ?: strings[2]
+                            val vString = strings.subList(2, strings.size).joinToString(" ")
+                            val v = vString.toIntOrNull() ?: vString
                             sstable.insert(key, v)
                             output.writeObject("success")
                             println("Set $key to $v")
@@ -51,5 +53,5 @@ class Server(val port: Int = 8000) {
 }
 
 fun main() {
-    Server().runServer()
+   Server().runServer()
 }

@@ -1,8 +1,6 @@
 package common
 
-import common.OperationType
-
-class MetaData(meta: Int) {
+class KVMetadata(meta: Int) {
     val op: OperationType
     val vType: DataType // 0 -> String, 1 -> Int
 

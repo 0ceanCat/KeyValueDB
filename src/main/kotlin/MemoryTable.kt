@@ -2,15 +2,20 @@ import common.DBOperation
 import common.OperationType
 import writerReader.TableWriter
 import writerReader.WAL
-import writerReader.Writer
 import java.io.Closeable
 import java.util.TreeMap
+import java.util.concurrent.Executors
 
 class MemoryTable(private val threshold: Int = 1024) : Closeable {
-    private val table = TreeMap<String, DBOperation>()
-    private val wal: Writer = WAL()
-    private val tableWriter: Writer = TableWriter()
+    private var table = TreeMap<String, DBOperation>()
+    private var wal: WAL = WAL()
+    private val tableWriter: TableWriter = TableWriter()
     private var size: Int = 0
+    private val writeWorker = Executors.newFixedThreadPool(1)
+    private val merger = Merger()
+    init {
+        merger.start()
+    }
 
     fun insert(key: String, v: Any) {
         updateTable(OperationType.INSERT, key, v)
@@ -19,7 +24,6 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
     fun delete(key: String, v: Any) {
         updateTable(OperationType.DELETE, key, v)
     }
-
 
     private fun updateTable(op: OperationType, key: String, v: Any) {
         val dbOperation = DBOperation(op, key, v)
@@ -31,20 +35,26 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
 
     private fun checkThreshold() {
         if (size >= threshold) {
-            writeToDisc()
-            reset()
+            val toBeWritten = table
+            table = TreeMap()
+            val lastWal = wal
+            wal = WAL()
+            writeWorker.execute {
+                writeToDisc(toBeWritten)
+                lastWal.close()
+            }
+
         }
     }
 
     override fun close() {
-        writeToDisc()
-        tableWriter.finish()
-        wal.finish()
+        writeToDisc(table)
+        tableWriter.close()
+        wal.close()
     }
 
     private fun reset() {
         wal.reset()
-        table.clear()
     }
 
     private fun updateSize(key: String, v: Any) {
@@ -69,13 +79,16 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
         wal.write(op)
     }
 
-    private fun writeToDisc() {
+    private fun writeToDisc(table: TreeMap<String, DBOperation>) {
         println("write to disc...")
         tableWriter.reset()
+        tableWriter.reserveSpaceForMetadata()
         for (entry in table) {
             tableWriter.write(entry.value)
         }
-        tableWriter.finish()
+        tableWriter.fillMetadata()
+        tableWriter.close()
+        merger.tryMerge()
     }
 
 }
