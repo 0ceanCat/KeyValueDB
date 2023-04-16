@@ -1,6 +1,7 @@
 package writerReader
 
 import common.SegmentMetadata
+import common.Utils
 import java.io.File
 import java.util.TreeSet
 
@@ -46,19 +47,16 @@ object IndexManager {
 
     fun scan(): Set<Segment> {
         val overlaps = mutableSetOf<Segment>()
-        for (f in File(path).listFiles()!!) {
-            if (f.name.startsWith("segment") && f.path !in readIndexes) {
+        for( f in Utils.readFilesFrom(path) { it.startsWith("segment") }){
+            if (f.path !in readIndexes) {
                 readIndexes.add(f.path)
                 val reader = IndexReader(f)
                 val readMetadata = reader.readMetadata()
-                if (readMetadata.level !in indexes) {
-                    indexes[readMetadata.level] = TreeSet()
-                }
+                val map = indexes.getOrPut(readMetadata.level){ TreeSet() }
 
                 val current = Segment(f.path.toString(), readMetadata)
-                val map = indexes[readMetadata.level]
-                val lower: Segment? = map?.floor(current)
-                val higher: Segment? = map?.ceiling(current)
+                val lower: Segment? = map.floor(current)
+                val higher: Segment? = map.ceiling(current)
                 if (Segment.overlap(lower, current)) {
                     overlaps.add(lower!!)
                     overlaps.add(current)
@@ -67,7 +65,7 @@ object IndexManager {
                     overlaps.add(higher!!)
                     overlaps.add(current)
                 }
-                indexes[readMetadata.level]?.add(current)
+                map.add(current)
             }
         }
         return overlaps

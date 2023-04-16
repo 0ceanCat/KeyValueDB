@@ -28,7 +28,7 @@ class IndexReader(private val f: File) {
         return DBOperationIterator()
     }
 
-    inner class DBOperationIterator {
+    inner class DBOperationIterator: Iterator<DBOperation?> {
         val metadata = readMetadata(false)
         private var current: DBOperation?
 
@@ -37,7 +37,11 @@ class IndexReader(private val f: File) {
             current = getNextOperation()
         }
 
-        fun next(): DBOperation? {
+        override fun hasNext(): Boolean {
+            return current != null
+        }
+
+        override fun next(): DBOperation? {
             val r = current
             val operation = getNextOperation()
             current = operation

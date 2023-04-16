@@ -13,6 +13,11 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
     private var size: Int = 0
     private val writeWorker = Executors.newFixedThreadPool(1)
     private val merger = Merger()
+
+    constructor(_table: TreeMap<String, DBOperation>, threshold: Int = 1024) : this(threshold) {
+        table = _table
+    }
+
     init {
         merger.start()
     }

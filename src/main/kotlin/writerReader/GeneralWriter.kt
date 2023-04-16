@@ -9,12 +9,15 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 abstract class GeneralWriter : Writer, Closeable {
+    companion object {
+        val prefix = "index"
+    }
+
     protected var writer: RandomAccessFile? = null
         set(value) {
             field = value
         }
 
-    protected val prefix = "index"
 
     protected var lastOffset = 0L
         get() = field

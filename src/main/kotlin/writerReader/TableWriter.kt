@@ -1,6 +1,7 @@
 package writerReader
 
 import common.DBOperation
+import common.Utils
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
@@ -11,13 +12,11 @@ class TableWriter : GeneralWriter() {
         private val id = AtomicInteger(0)
 
         init {
-            var max = 0
-            for (f in File(prefix).listFiles()!!) {
-                if (f.isFile && f.name.startsWith("segment")) {
-                    max = maxOf(max, f.name.split("_")[1].toInt())
-                }
+            var max = -1
+            for (f in Utils.readFilesFrom(prefix) {it.startsWith("segment")}) {
+                max = maxOf(max, f.name.split("_")[1].toInt())
             }
-            id.set(max)
+            id.set(max + 1)
         }
     }
 
