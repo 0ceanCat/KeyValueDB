@@ -1,22 +1,20 @@
-import common.DBOperation
 import writerReader.IndexManager
 import writerReader.IndexReader
 import writerReader.TableWriter
 import java.io.File
 import java.util.concurrent.locks.ReentrantLock
 
-class Merger : Thread() {
+object Merger : Thread() {
     private val lock = ReentrantLock()
     private val cond = lock.newCondition()
-
     override fun run() {
         while (true) {
-            val overlaps = IndexManager.scan()
+            val overlaps = IndexManager.getOverlaps()
             if (overlaps.isEmpty()) {
                 try {
                     lock.lock()
                     cond.await()
-                } finally {
+                }finally {
                     lock.unlock()
                 }
             } else {
@@ -25,12 +23,21 @@ class Merger : Thread() {
         }
     }
 
+    fun tryMerge(){
+        try {
+            lock.lock()
+            cond.signalAll()
+        }finally {
+            lock.unlock()
+        }
+    }
+
     private fun merge(paths: Set<IndexManager.Segment>) {
         println("merging segments: $paths")
         val readers = mutableListOf<Pair<IndexReader, IndexReader.DBOperationIterator>>()
         for (p in paths) {
             val reader = IndexReader(File(p.path))
-            readers += Pair(reader, reader.iterator())
+            readers += Pair(reader, reader.iterator() as IndexReader.DBOperationIterator)
         }
         val level = readers[0].second.metadata.level + 1
         val tableWriter = TableWriter()
@@ -68,16 +75,8 @@ class Merger : Thread() {
         }
         tableWriter.fillMetadata(level)
         tableWriter.close()
+        IndexManager.remove(paths)
         println("merge finished...")
-    }
-
-    fun tryMerge() {
-        try {
-            lock.lock()
-            cond.signalAll()
-        } finally {
-            lock.unlock()
-        }
     }
 
 }

@@ -12,18 +12,13 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
     private val tableWriter: TableWriter = TableWriter()
     private var size: Int = 0
     private val writeWorker = Executors.newFixedThreadPool(1)
-    private val merger = Merger()
-
-    constructor(_table: TreeMap<String, DBOperation>, threshold: Int = 1024) : this(threshold) {
-        table = _table
-    }
-
-    init {
-        merger.start()
-    }
 
     fun insert(key: String, v: Any) {
         updateTable(OperationType.INSERT, key, v)
+    }
+
+    fun get(key: String): Any? {
+        return table.get(key)?.v
     }
 
     fun delete(key: String, v: Any) {
@@ -44,6 +39,7 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
             table = TreeMap()
             val lastWal = wal
             wal = WAL()
+            size = 0
             writeWorker.execute {
                 writeToDisc(toBeWritten)
                 lastWal.close()
@@ -72,7 +68,7 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
             size += 4
         } else {
             v as String
-            size += stringSize(key)
+            size += stringSize(v)
         }
     }
 
@@ -85,15 +81,16 @@ class MemoryTable(private val threshold: Int = 1024) : Closeable {
     }
 
     private fun writeToDisc(table: TreeMap<String, DBOperation>) {
-        println("write to disc...")
         tableWriter.reset()
+        println("write data to ${tableWriter.currentPath}...")
         tableWriter.reserveSpaceForMetadata()
         for (entry in table) {
             tableWriter.write(entry.value)
         }
         tableWriter.fillMetadata()
         tableWriter.close()
-        merger.tryMerge()
+        Merger.tryMerge()
+        println("${tableWriter.currentPath} done")
     }
 
 }

@@ -4,7 +4,7 @@ import common.*
 import java.io.File
 import java.io.RandomAccessFile
 
-class IndexReader(private val f: File) {
+class IndexReader(private val f: File): Iterable<DBOperation?> {
     private val reader: RandomAccessFile
     private val fileId: Int
 
@@ -24,7 +24,7 @@ class IndexReader(private val f: File) {
         return SegmentMetadata(level, fileId, firstOp.k, lastOP?.k)
     }
 
-    fun iterator(): DBOperationIterator {
+    override fun iterator(): Iterator<DBOperation?> {
         return DBOperationIterator()
     }
 
@@ -72,8 +72,11 @@ class IndexReader(private val f: File) {
         return DBOperation(meta.op, key, v)
     }
 
-    fun closeAndRemove() {
+    fun close(){
         reader.close()
+    }
+    fun closeAndRemove() {
+        close()
         f.delete()
     }
 
