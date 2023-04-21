@@ -8,13 +8,20 @@ class Searcher {
         val segment = IndexManager.getIndexFor(key)
         if (segment == null) return null
 
+        val startOffset = segment.getStartOffset(key)
+        val endOffset = segment.getEndOffset(key)
+
         val reader = IndexReader(File(segment.path))
-        for (dbOp in reader) {
-            if (dbOp!!.k == key) {
+        reader.seek(startOffset.toLong())
+        var dbOp = reader.getNextOperation()
+        while (dbOp != null) {
+            if (dbOp.k == key) {
                 if (dbOp.op == OperationType.DELETE) return null
                 reader.close()
                 return dbOp.v
             }
+            if (reader.getFilePointer() >= endOffset) break;
+            dbOp = reader.getNextOperation()
         }
         return null
     }

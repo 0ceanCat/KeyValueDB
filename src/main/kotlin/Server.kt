@@ -7,18 +7,17 @@ import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.TreeMap
 
 class Server(val port: Int = 8000) {
     private val threshold = 64
-    private val sstable: MemoryTable
+    private val database: Database
     private val searcher = Searcher()
 
     init {
         val reloadedOperations = checkWAL()
-        sstable = MemoryTable(threshold)
+        database = Database(threshold)
         for (op in reloadedOperations)
-            sstable.insert(op.k, op.v)
+            database.insert(op.k, op.v)
         Merger.start()
     }
 
@@ -51,7 +50,7 @@ class Server(val port: Int = 8000) {
                                 val key = strings[1].trim()
                                 val vString = strings.subList(2, strings.size).joinToString(" ")
                                 val v = vString.toIntOrNull() ?: vString
-                                sstable.insert(key, v)
+                                database.insert(key, v)
                                 output.writeObject("success")
                                 println("Set $key to $v")
                             } catch (e: Exception) {
@@ -64,7 +63,7 @@ class Server(val port: Int = 8000) {
                                 output.writeObject("ah?")
                             } else {
                                 val key = strings[1].trim()
-                                var value = sstable.get(key)
+                                var value = database.get(key)
                                 value = value ?: let { searcher.searchFromDisc(key) }
                                 value?.let {
                                     output.writeObject(value)
@@ -96,7 +95,7 @@ class Server(val port: Int = 8000) {
             }
         } finally {
             println("shutdown...")
-            sstable.close()
+            database.close()
         }
 
     }

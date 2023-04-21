@@ -1,3 +1,5 @@
+import common.Segment
+import common.SegmentMetadata
 import writerReader.IndexManager
 import writerReader.IndexReader
 import writerReader.TableWriter
@@ -32,17 +34,20 @@ object Merger : Thread() {
         }
     }
 
-    private fun merge(paths: Set<IndexManager.Segment>) {
+    private fun merge(paths: Set<Segment>) {
         println("merging segments: $paths")
         val readers = mutableListOf<Pair<IndexReader, IndexReader.DBOperationIterator>>()
-        for (p in paths) {
+        val metadatas = mutableListOf<SegmentMetadata>()
+        for ( p in paths) {
             val reader = IndexReader(File(p.path))
-            readers += Pair(reader, reader.iterator() as IndexReader.DBOperationIterator)
+            val iterator = reader.iterator() as IndexReader.DBOperationIterator
+            readers += Pair(reader, iterator)
+            metadatas += iterator.metadata
         }
         val level = readers[0].second.metadata.level + 1
         val tableWriter = TableWriter()
         tableWriter.reset()
-        tableWriter.reserveSpaceForMetadata()
+        tableWriter.reserveSpaceForMetadata(SegmentMetadata.computeBytesForMetadata(metadatas))
         while (!readers.isEmpty()) {
             var minDBOperation = readers[0].second.current()
             var minReader = readers[0]

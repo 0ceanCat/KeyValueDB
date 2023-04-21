@@ -1,9 +1,10 @@
 package writerReader
 
+import common.Segment
 import common.SegmentMetadata
 import common.Utils
-import java.io.File
-import java.util.TreeSet
+import java.util.*
+import kotlin.Comparator
 
 object IndexManager {
     private val path = "index"
@@ -11,71 +12,24 @@ object IndexManager {
     private val indexes = TreeSet<Segment>(Comparator.comparing { x -> -x.id })
     private val readIndexNames = mutableMapOf<String, Segment>()
 
-    class Segment(
-        val path: String, metadata: SegmentMetadata
-    ) : Comparable<Segment> {
-
-        override fun equals(other: Any?): Boolean {
-            if (other is Segment)
-                return path == other.path
-            else
-                return false
-        }
-        override fun compareTo(other: Segment): Int {
-            if (other.first != first) return other.first.compareTo(first)
-            return other.last.compareTo(last)
-        }
-
-        companion object {
-            fun overlap(sg1: Segment?, sg2: Segment?): Boolean {
-                if (sg1 == null || sg2 == null) return false
-                return sg1.firstHigherThan(sg2) and sg1.lastLowerThan(sg2) or sg2.firstHigherThan(sg1) and sg2.lastLowerThan(
-                    sg1
-                )
-            }
-        }
-
-        val last = metadata.last
-        val first = metadata.first
-        val level = metadata.level
-        val id = metadata.id
-
-        fun contains(key: String): Boolean {
-            return first <= key && key <= last
-        }
-
-        private fun firstHigherThan(other: Segment): Boolean {
-            return first.compareTo(other.first) >= 0
-        }
-
-        private fun lastLowerThan(other: Segment): Boolean {
-            return last.compareTo(other.last) <= 0
-        }
-
-        override fun toString(): String {
-            return "${path}_${level}_${id}"
-        }
-
-        override fun hashCode(): Int {
-            var result = path.hashCode()
-            result = 31 * result + last.hashCode()
-            result = 31 * result + first.hashCode()
-            result = 31 * result + level
-            result = 31 * result + id
-            return result
-        }
-    }
-
-    private fun scan(): List<File> {
-        val res = mutableListOf<File>()
+    private fun scan(): List<Segment> {
+        val res = mutableListOf<Segment>()
         for (f in Utils.readFilesFrom(path) { it.startsWith("segment") }) {
             if (f.path !in readIndexNames) {
-                res += f
                 val reader = IndexReader(f)
                 val readMetadata = reader.readMetadata()
+                val sstable = TreeMap<String, Int>()
+
+                for (i in readMetadata.blocksOffset) {
+                    reader.seek(i.toLong())
+                    val key = reader.readKey()
+                    sstable[key] = i
+                }
+
                 indexMap.getOrPut(readMetadata.level) { TreeSet() }
-                val segment = Segment(f.path.toString(), readMetadata)
+                val segment = Segment(f.path.toString(), readMetadata, sstable)
                 indexes.add(segment)
+                res += segment
                 readIndexNames[f.path] = segment
             }
         }
@@ -92,9 +46,7 @@ object IndexManager {
     fun getOverlaps(): Set<Segment> {
         val overlaps = mutableSetOf<Segment>()
         for (f in scan()) {
-            val reader = IndexReader(f)
-            val readMetadata = reader.readMetadata()
-            val map = indexMap[readMetadata.level]!!
+            val map = indexMap[f.metadata.level]!!
             val current = readIndexNames[f.path]!!
             val lower: Segment? = map.floor(current)
             val higher: Segment? = map.ceiling(current)
@@ -112,7 +64,7 @@ object IndexManager {
     }
 
     fun remove(paths: Set<Segment>) {
-        for (p in paths){
+        for (p in paths) {
             readIndexNames.remove(p.path)
             indexMap[p.level]?.remove(p)
         }

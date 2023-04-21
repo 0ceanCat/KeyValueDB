@@ -1,8 +1,6 @@
 package writerReader
 
-import common.DBOperation
 import common.Utils
-import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -13,7 +11,7 @@ class TableWriter : GeneralWriter() {
 
         init {
             var max = -1
-            for (f in Utils.readFilesFrom(prefix) {it.startsWith("segment")}) {
+            for (f in Utils.readFilesFrom(prefix) { it.startsWith("segment") }) {
                 max = maxOf(max, f.name.split("_")[1].toInt())
             }
             id.set(max + 1)
@@ -25,8 +23,8 @@ class TableWriter : GeneralWriter() {
     var currentPath = ""
         get() = field
 
-    fun reserveSpaceForMetadata() {
-        for (i in 1..5) {
+    fun reserveSpaceForMetadata(nBytes: Int) {
+        for (i in 1..nBytes) {
             writer!!.write(0)
         }
     }
@@ -41,13 +39,17 @@ class TableWriter : GeneralWriter() {
         writer = RandomAccessFile("$prefix/$currentPath", "rws")
     }
 
-    fun fillMetadata(level: Int = 0) {
-        writer!!.seek(0)
-        writer!!.write(level)
-        var offset = lastOffset
-        for (i in 1..4) {
-            writer!!.write((offset and 0xff).toInt())
-            offset = offset shr 8
+    fun fillMetadata(level: Int = 0, checkpoints: List<Int> = mutableListOf()) {
+        val wt = writer!!
+        wt.seek(0)
+        wt.write(level)
+        wt.write(checkpoints.size)
+        for (checkpoint in checkpoints) {
+            var cp = checkpoint
+            for (i in 1..4) {
+                wt.write(cp and 0xff)
+                cp = cp shr 8
+            }
         }
     }
 }

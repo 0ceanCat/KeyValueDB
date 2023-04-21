@@ -1,96 +1,94 @@
 import common.DBOperation
-import common.OperationType
-import writerReader.TableWriter
-import writerReader.WAL
-import java.io.Closeable
-import java.util.TreeMap
-import java.util.concurrent.Executors
+import common.SegmentMetadata
+import java.util.*
+import kotlin.collections.HashMap
 
-class MemoryTable(private val threshold: Int = 1024) : Closeable {
-    private var table = TreeMap<String, DBOperation>()
-    private var wal: WAL = WAL()
-    private val tableWriter: TableWriter = TableWriter()
-    private var size: Int = 0
-    private val writeWorker = Executors.newFixedThreadPool(1)
+class MemoryTable : Iterable<MutableMap.MutableEntry<String, DBOperation>> {
+    private val table = TreeMap<String, DBOperation>()
+    private val sizes = HashMap<String, Int>()
 
-    fun insert(key: String, v: Any) {
-        updateTable(OperationType.INSERT, key, v)
-    }
+    var size = 0
+        private set
 
-    fun get(key: String): Any? {
-        return table.get(key)?.v
-    }
-
-    fun delete(key: String, v: Any) {
-        updateTable(OperationType.DELETE, key, v)
-    }
-
-    private fun updateTable(op: OperationType, key: String, v: Any) {
-        val dbOperation = DBOperation(op, key, v)
-        updateSize(key, v)
-        writeWAL(dbOperation)
-        table[key] = dbOperation
-        checkThreshold()
-    }
-
-    private fun checkThreshold() {
-        if (size >= threshold) {
-            val toBeWritten = table
-            table = TreeMap()
-            val lastWal = wal
-            wal = WAL()
-            size = 0
-            writeWorker.execute {
-                writeToDisc(toBeWritten)
-                lastWal.close()
-            }
-
+    var blocks = -1
+        private set
+        get() {
+            if (field == -1) updateBlocks()
+            return field
         }
+
+    private val points = mutableListOf<Int>()
+
+    private var lastPoint = 0
+
+    val checkPoints = points
+        get() {
+            val r = mutableListOf<Int>()
+            r.addAll(field)
+            return r
+        }
+
+    companion object {
+        val sizePerBlock = 16 //1024 * 16 // 16kb
     }
 
-    override fun close() {
-        writeToDisc(table)
-        tableWriter.close()
-        wal.close()
+    fun get(key: String): DBOperation? {
+        return table[key]
     }
 
-    private fun reset() {
-        wal.reset()
+    fun put(key: String, value: DBOperation) {
+        val kvSize = updateSize(key, value.v)
+        table[key] = value
+        sizes[key] = kvSize
     }
 
-    private fun updateSize(key: String, v: Any) {
+    private fun updateSize(key: String, v: Any): Int {
+        val initial = size
         if (key in table) {
-            size -= if (table[key]!!.v is Int) 4 else stringSize(table[key]!!.v as String)
+            size -= if (table[key]?.v is Int) vIntSize(v as Int) else stringSize(table[key]?.v as String)
         } else {
             size += stringSize(key)
         }
         if (v is Int) {
-            size += 4
+            size += vIntSize(v)
         } else {
             v as String
             size += stringSize(v)
         }
+        return size - initial
+    }
+
+    private fun vIntSize(v: Int): Int {
+        if (v >= 0x0 && v <= 0x7f) return 1
+        else if (v >= 0x80 && v <= 0x3fff) return 2
+        else if (v >= 0x4000 && v <= 0x1fffff) return 3
+        else if (v >= 0x200000 && v <= 0x0fffffff) return 4
+        return 5
+    }
+
+    private fun updateBlocks() {
+        var orderedSize = 0
+        var blockCounter = 0
+        var recordCounter = 0
+        for (k in table.keys) {
+            orderedSize += sizes[k]!!
+            recordCounter += SegmentMetadata.bytesForKVmeta
+            if (orderedSize - lastPoint >= sizePerBlock) {
+                points += lastPoint
+                orderedSize += recordCounter
+                lastPoint = orderedSize
+                blockCounter++
+                recordCounter = 0
+            }
+        }
+        blocks = blockCounter
     }
 
     private fun stringSize(v: String): Int {
-        return v.length * 2
+        return v.toByteArray().size + vIntSize(v.length)
     }
 
-    private fun writeWAL(op: DBOperation) {
-        wal.write(op)
+    override fun iterator(): Iterator<MutableMap.MutableEntry<String, DBOperation>> {
+        return table.iterator()
     }
-
-    private fun writeToDisc(table: TreeMap<String, DBOperation>) {
-        tableWriter.reset()
-        println("write data to ${tableWriter.currentPath}...")
-        tableWriter.reserveSpaceForMetadata()
-        for (entry in table) {
-            tableWriter.write(entry.value)
-        }
-        tableWriter.fillMetadata()
-        tableWriter.close()
-        Merger.tryMerge()
-        println("${tableWriter.currentPath} done")
-    }
-
 }
