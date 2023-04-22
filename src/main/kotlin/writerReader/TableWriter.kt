@@ -51,12 +51,14 @@ class TableWriter : GeneralWriter() {
     }
 
     override fun reset() {
-        if (writer != null) close()
+        writer?.close()
         startWrite()
     }
 
     private fun startWrite() {
         currentPath = "${basicPath}_${id.incrementAndGet()}"
+        pointer = 0
+        blockOffsets.clear()
         writer = RandomAccessFile("$prefix/$currentPath", "rws")
     }
 
@@ -67,7 +69,7 @@ class TableWriter : GeneralWriter() {
         wt.write(level)
         for (checkpoint in blockOffsets) {
             var cp = checkpoint
-            for (i in 1..4) {
+            for (i in 1..SegmentMetadata.bytesPerBlockOffset) {
                 wt.write(cp and 0xff)
                 cp = cp shr 8
             }

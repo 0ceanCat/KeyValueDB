@@ -47,11 +47,15 @@ class Server(val port: Int = 8000) {
                         "set" -> {
                             try {
                                 val key = strings[1].trim()
-                                val vString = strings.subList(2, strings.size).joinToString(" ")
-                                val v = vString.toIntOrNull() ?: vString
-                                database.insert(key, v)
-                                output.writeObject("success")
-                                println("Set $key to $v")
+                                if (strings.size > 2){
+                                    val vString = strings.subList(2, strings.size).joinToString(" ")
+                                    val v = vString.toIntOrNull() ?: vString
+                                    database.insert(key, v)
+                                    output.writeObject("success")
+                                    println("Set $key to $v")
+                                }else{
+                                    output.writeObject("rip")
+                                }
                             } catch (e: Exception) {
                                 output.writeObject("failed")
                             }

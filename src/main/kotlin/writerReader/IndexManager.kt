@@ -1,7 +1,6 @@
 package writerReader
 
 import common.Segment
-import common.SegmentMetadata
 import common.Utils
 import java.util.*
 import kotlin.Comparator
@@ -9,38 +8,21 @@ import kotlin.Comparator
 object IndexManager {
     private val path = "index"
     private val indexMap = mutableMapOf<Int, TreeSet<Segment>>()
-    private val indexes = TreeSet<Segment>(Comparator.comparing { x -> -x.id })
     private val readIndexNames = mutableMapOf<String, Segment>()
+    val indexes = TreeSet<Segment>(Comparator.comparing { x -> -x.id })
 
     private fun scan(): List<Segment> {
         val res = mutableListOf<Segment>()
         for (f in Utils.readFilesFrom(path) { it.startsWith("segment") }) {
             if (f.path !in readIndexNames) {
-                val reader = IndexReader(f)
-                val readMetadata = reader.readMetadata()
-                val sstable = TreeMap<String, Int>()
-
-                for (i in readMetadata.blocksOffset) {
-                    reader.seek(i.toLong())
-                    val key = reader.readKey()
-                    sstable[key] = i
-                }
-
-                indexMap.getOrPut(readMetadata.level) { TreeSet() }
-                val segment = Segment(f.path.toString(), readMetadata, sstable)
+                val segment = Segment(f)
+                indexMap.getOrPut(segment.metadata.level) { TreeSet() }
                 indexes.add(segment)
                 res += segment
                 readIndexNames[f.path] = segment
             }
         }
         return res
-    }
-
-    fun getIndexFor(key: String): Segment? {
-        for (index in indexes) {
-            if (index.contains(key)) return index;
-        }
-        return null
     }
 
     fun getOverlaps(): Set<Segment> {

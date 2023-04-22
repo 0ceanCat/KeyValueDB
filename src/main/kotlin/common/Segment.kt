@@ -1,12 +1,35 @@
 package common
 
+import writerReader.IndexReader
+import java.io.File
 import java.util.*
 
 class Segment(
-    val path: String,
-    val metadata: SegmentMetadata,
-    private val sstable: TreeMap<String, Int>
+    f: File
 ) : Comparable<Segment> {
+    val path: String
+    val metadata: SegmentMetadata
+    private val sstable: TreeMap<String, Block>
+
+    init {
+        path = f.path
+        val reader = IndexReader(f)
+        metadata = reader.readMetadata()
+        sstable = TreeMap<String, Block>()
+
+        val blocksOffset = metadata.blocksOffset
+        for (i in blocksOffset.indices) {
+            val offset = blocksOffset[i]
+            reader.seek(offset.toLong())
+            val key = reader.readKey()
+            if (i < blocksOffset.size - 1)
+                sstable[key] = Block(path, offset, blocksOffset[i + 1])
+            else
+                sstable[key] = Block(path, offset, Int.MAX_VALUE)
+        }
+
+        reader.close()
+    }
 
     override fun equals(other: Any?): Boolean {
         if (other is Segment)
@@ -31,7 +54,7 @@ class Segment(
     val level = metadata.level
     val id = metadata.id
 
-    fun contains(key: String): Boolean {
+    private fun contains(key: String): Boolean {
         val lower = sstable.floorKey(key)
         val higher = sstable.ceilingKey(key)
         return lower != null && higher != null
@@ -49,16 +72,18 @@ class Segment(
         return "${path}_${level}_${id}"
     }
 
-    fun getStartOffset(key: String): Int {
-        return sstable.floorEntry(key).value
-    }
-
-    fun getEndOffset(key: String): Int {
-        return sstable.ceilingEntry(key)?.value?:Int.MAX_VALUE
-    }
-
     override fun hashCode(): Int {
         return id
+    }
+
+    fun getPossibleBlock(key: String):Block? {
+        if (contains(key)){
+            val lower = sstable.floorEntry(key)
+            val higher = sstable.ceilingEntry(key)
+            if (lower === higher) return lower.value
+            return Block(path, lower.value.startOffset, higher.value.startOffset)
+        }
+        return null
     }
 
 }

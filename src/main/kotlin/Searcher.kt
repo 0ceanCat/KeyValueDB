@@ -1,28 +1,23 @@
-import common.OperationType
+import common.Segment
 import writerReader.IndexManager
-import writerReader.IndexReader
-import java.io.File
+import java.util.*
 
 class Searcher {
+
+    val sstables: TreeSet<Segment>
+
+    init {
+        sstables = IndexManager.indexes
+    }
+
     fun searchFromDisc(key: String): Any? {
-        val segment = IndexManager.getIndexFor(key)
-        if (segment == null) return null
-
-        val startOffset = segment.getStartOffset(key)
-        val endOffset = segment.getEndOffset(key)
-
-        val reader = IndexReader(File(segment.path))
-        reader.seek(startOffset.toLong())
-        var dbOp = reader.getNextOperation()
-        while (dbOp != null) {
-            if (dbOp.k == key) {
-                if (dbOp.op == OperationType.DELETE) return null
-                reader.close()
-                return dbOp.v
+        for (sstable in sstables) {
+            val block = sstable.getPossibleBlock(key)
+            if (block != null) {
+                return block.get(key)
             }
-            if (reader.getFilePointer() >= endOffset) break;
-            dbOp = reader.getNextOperation()
         }
+
         return null
     }
 }

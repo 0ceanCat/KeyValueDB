@@ -5,23 +5,33 @@ import common.SegmentMetadata
 import writerReader.TableWriter
 import writerReader.WAL
 import java.io.Closeable
+import java.util.LinkedList
 import java.util.concurrent.Executors
 
 class Database : Closeable {
     private var table = MemoryTable()
+    private val fullTables = LinkedList<MemoryTable>()
     private var wal: WAL = WAL()
     private val tableWriter: TableWriter = TableWriter()
     private val writeWorker = Executors.newFixedThreadPool(1)
     private val searcher = Searcher()
     private val threshold = Config.MEMORY_TABLE_THRESHOLD
+
+
     fun insert(key: String, v: Any) {
         updateTable(OperationType.INSERT, key, v)
     }
 
     fun get(key: String): Any? {
         var v = table.get(key)?.v
-        v = v ?: let { searcher.searchFromDisc(key) }
-        return v
+        v = v ?: let {
+            for (t in fullTables) {
+                v = t.get(key)?.v
+                if (v != null) return v
+            }
+            v
+        }
+        return v ?: searcher.searchFromDisc(key)
     }
 
     fun delete(key: String, v: Any) {
@@ -39,11 +49,14 @@ class Database : Closeable {
         if (table.size >= threshold) {
             val toBeWritten = table
             table = MemoryTable()
+            fullTables.addLast(toBeWritten)
             val lastWal = wal
             wal = WAL()
             writeWorker.execute {
                 writeToDisc(toBeWritten)
+                Merger.tryMerge()
                 lastWal.close()
+                fullTables.pollFirst()
             }
 
         }
@@ -72,7 +85,6 @@ class Database : Closeable {
         }
         tableWriter.fillMetadata()
         tableWriter.close()
-        Merger.tryMerge()
         println("${tableWriter.currentPath} done")
     }
 
