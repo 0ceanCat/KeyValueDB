@@ -9,13 +9,12 @@ import java.net.ServerSocket
 import java.net.Socket
 
 class Server(val port: Int = 8000) {
-    private val threshold = 64
     private val database: Database
     private val searcher = Searcher()
 
     init {
         val reloadedOperations = checkWAL()
-        database = Database(threshold)
+        database = Database()
         for (op in reloadedOperations)
             database.insert(op.k, op.v)
         Merger.start()
@@ -63,8 +62,7 @@ class Server(val port: Int = 8000) {
                                 output.writeObject("ah?")
                             } else {
                                 val key = strings[1].trim()
-                                var value = database.get(key)
-                                value = value ?: let { searcher.searchFromDisc(key) }
+                                val value = database.get(key)
                                 value?.let {
                                     output.writeObject(value)
                                     value

@@ -1,5 +1,8 @@
 package writerReader
 
+import common.Config
+import common.DBOperation
+import common.SegmentMetadata
 import common.Utils
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
@@ -20,12 +23,30 @@ class TableWriter : GeneralWriter() {
 
     private val basicPath = "segment"
 
+    private var pointer = 0L
+
+    private var lastKeyValueOffset = 0L
+
+    private val blockOffsets = mutableListOf<Int>()
+
     var currentPath = ""
         get() = field
 
     fun reserveSpaceForMetadata(nBytes: Int) {
+        val wt = writer!!
         for (i in 1..nBytes) {
-            writer!!.write(0)
+            wt.write(0)
+        }
+        pointer = wt.filePointer
+    }
+
+    override fun write(op: DBOperation) {
+        val wt = writer!!
+        lastKeyValueOffset = wt.filePointer
+        super.write(op)
+        if (wt.filePointer - pointer >= Config.BLOCK_SIZE) {
+            blockOffsets += pointer.toInt()
+            pointer = wt.filePointer
         }
     }
 
@@ -39,12 +60,12 @@ class TableWriter : GeneralWriter() {
         writer = RandomAccessFile("$prefix/$currentPath", "rws")
     }
 
-    fun fillMetadata(level: Int = 0, checkpoints: List<Int> = mutableListOf()) {
+    fun fillMetadata(level: Int = 0) {
+        blockOffsets += lastKeyValueOffset.toInt() // add the offset of the last key-value pair
         val wt = writer!!
         wt.seek(0)
         wt.write(level)
-        wt.write(checkpoints.size)
-        for (checkpoint in checkpoints) {
+        for (checkpoint in blockOffsets) {
             var cp = checkpoint
             for (i in 1..4) {
                 wt.write(cp and 0xff)

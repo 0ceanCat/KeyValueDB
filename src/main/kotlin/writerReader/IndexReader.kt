@@ -18,11 +18,11 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
     fun readMetadata(): SegmentMetadata {
         val level = readLevel()
-        val nBlocks = readNofBlocks()
         val blocksOffset = mutableListOf<Int>()
-        for (i in 1..nBlocks) blocksOffset += readInt()
+        for (i in 1..SegmentMetadata.numberOfBlocks)
+            blocksOffset += readInt()
         metadata = SegmentMetadata(level, fileId, blocksOffset)
-        return metadata!!
+        return metadata as SegmentMetadata
     }
 
     override fun iterator(): Iterator<DBOperation?> {

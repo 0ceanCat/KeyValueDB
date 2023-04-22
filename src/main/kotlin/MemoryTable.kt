@@ -21,13 +21,6 @@ class MemoryTable : Iterable<MutableMap.MutableEntry<String, DBOperation>> {
 
     private var lastPoint = 0
 
-    val checkPoints = points
-        get() {
-            val r = mutableListOf<Int>()
-            r.addAll(field)
-            return r
-        }
-
     companion object {
         val sizePerBlock = 16 //1024 * 16 // 16kb
     }

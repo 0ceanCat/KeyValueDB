@@ -34,7 +34,7 @@ class Segment(
     fun contains(key: String): Boolean {
         val lower = sstable.floorKey(key)
         val higher = sstable.ceilingKey(key)
-        return lower != null || higher != null
+        return lower != null && higher != null
     }
 
     private fun firstHigherThan(other: Segment): Boolean {

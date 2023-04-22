@@ -37,17 +37,15 @@ object Merger : Thread() {
     private fun merge(paths: Set<Segment>) {
         println("merging segments: $paths")
         val readers = mutableListOf<Pair<IndexReader, IndexReader.DBOperationIterator>>()
-        val metadatas = mutableListOf<SegmentMetadata>()
         for ( p in paths) {
             val reader = IndexReader(File(p.path))
             val iterator = reader.iterator() as IndexReader.DBOperationIterator
             readers += Pair(reader, iterator)
-            metadatas += iterator.metadata
         }
         val level = readers[0].second.metadata.level + 1
         val tableWriter = TableWriter()
         tableWriter.reset()
-        tableWriter.reserveSpaceForMetadata(SegmentMetadata.computeBytesForMetadata(metadatas))
+        tableWriter.reserveSpaceForMetadata(SegmentMetadata.nOfbytesForMetadata)
         while (!readers.isEmpty()) {
             var minDBOperation = readers[0].second.current()
             var minReader = readers[0]
