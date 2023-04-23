@@ -45,7 +45,7 @@ object Merger : Thread() {
         val level = readers[0].second.metadata.level + 1
         val tableWriter = TableWriter()
         tableWriter.reset()
-        tableWriter.reserveSpaceForMetadata(SegmentMetadata.nOfbytesForMetadata)
+        tableWriter.reserveSpaceForMetadata()
         while (!readers.isEmpty()) {
             var minDBOperation = readers[0].second.current()
             var minReader = readers[0]
@@ -68,10 +68,11 @@ object Merger : Thread() {
                 }
             }
 
-            minReader.second.next()
-            if (minReader.second.current() == null) {
+            if (minReader.first.getFilePointer().toInt() >= minReader.first.metadata?.blocksStartOffset!!){
                 readers -= minReader
                 minReader.first.closeAndRemove()
+            }else{
+                minReader.second.next()
             }
 
             minDBOperation?.let { tableWriter.write(it) }

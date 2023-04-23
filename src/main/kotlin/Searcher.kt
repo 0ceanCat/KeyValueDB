@@ -1,23 +1,26 @@
 import common.Segment
 import writerReader.IndexManager
-import java.util.*
 
 class Searcher {
 
-    val sstables: TreeSet<Segment>
-
-    init {
-        sstables = IndexManager.indexes
-    }
+    val sstables: MutableList<Segment> = IndexManager.indexes
 
     fun searchFromDisc(key: String): Any? {
-        for (sstable in sstables) {
-            val block = sstable.getPossibleBlock(key)
-            if (block != null) {
-                return block.get(key)
+        for ((i, sstable) in sstables.withIndex()) {
+            val lower = sstable.floorKey(key)
+            val higher = sstable.ceilingKey(key)
+            if (lower != null && higher != null) {
+                return lookUpKey(sstable, key)
+            } else if (lower != null) {
+                if (sstable === sstables.last() || sstables[i + 1].floorKey(key) == null)
+                    return lookUpKey(sstable, key)
             }
         }
-
         return null
+    }
+
+    private fun lookUpKey(sstable: Segment, key: String): Any? {
+        val block = sstable.getPossibleBlock(key)
+        return block.get(key)
     }
 }

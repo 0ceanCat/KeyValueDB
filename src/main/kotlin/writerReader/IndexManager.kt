@@ -9,7 +9,8 @@ object IndexManager {
     private val path = "index"
     private val indexMap = mutableMapOf<Int, TreeSet<Segment>>()
     private val readIndexNames = mutableMapOf<String, Segment>()
-    val indexes = TreeSet<Segment>(Comparator.comparing { x -> -x.id })
+    private var inited = false
+    val indexes = mutableListOf<Segment>()
 
     private fun scan(): List<Segment> {
         val res = mutableListOf<Segment>()
@@ -21,6 +22,10 @@ object IndexManager {
                 res += segment
                 readIndexNames[f.path] = segment
             }
+        }
+        if (!inited){
+            indexes.sortWith(Comparator.comparing { x -> -x.id })
+            inited = true
         }
         return res
     }

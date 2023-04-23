@@ -11,6 +11,8 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         get() = field
         private set
 
+    private var lastString = byteArrayOf()
+
     init {
         reader = RandomAccessFile(f.path, "r")
         fileId = f.name.split("_")[1].toInt()
@@ -18,10 +20,14 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
     fun readMetadata(): SegmentMetadata {
         val level = readLevel()
+        val blocksStartOffset = readInt()
+        val currentOffset = getFilePointer()
+        seek(blocksStartOffset.toLong())
         val blocksOffset = mutableListOf<Int>()
         for (i in 1..SegmentMetadata.numberOfBlocks)
             blocksOffset += readInt()
-        metadata = SegmentMetadata(level, fileId, blocksOffset)
+        seek(currentOffset)
+        metadata = SegmentMetadata(level, blocksStartOffset, fileId, blocksOffset)
         return metadata as SegmentMetadata
     }
 
@@ -62,7 +68,7 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
         if (meta == null) return null
 
-        val key = readString()
+        val key = readKey()
 
         val v: Any
 
@@ -97,10 +103,6 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         return reader.read()
     }
 
-    private fun readNofBlocks(): Int{
-        return reader.read()
-    }
-
     private fun readInt(): Int {
         var v = reader.read()
         v = reader.read() shl 8 or v
@@ -128,15 +130,26 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
     }
 
     private fun readString(): String {
-        val keyLen = readVint()
-        val keyBytes = ByteArray(keyLen)
-        reader.read(keyBytes)
-        return String(keyBytes)
+        val vLen = readVint()
+        val vBytes = ByteArray(vLen)
+        reader.read(vBytes)
+        return String(vBytes)
     }
 
-    fun readKey(): String {
-        readKVmeta()
-        return readString()
+    private fun readKey(): String {
+        val prefix = readVint()
+        val kLen = readVint()
+        val kBytes = ByteArray(kLen)
+        reader.read(kBytes)
+        val currentBytes = lastString.sliceArray(0 until prefix) + kBytes
+        val key = String(currentBytes)
+        lastString = currentBytes
+        return key
+    }
+
+    fun readKeyIgnoringKvMeta(): String {
+        reader.seek(reader.filePointer + 1)
+        return readKey()
     }
 
     private fun readKVmeta(): KVMetadata? {

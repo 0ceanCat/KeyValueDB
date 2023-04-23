@@ -8,7 +8,7 @@ import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.Path
 
-abstract class GeneralWriter : Writer, Closeable {
+abstract class GeneralWriter : Closeable {
     companion object {
         val prefix = "index"
     }
@@ -22,25 +22,27 @@ abstract class GeneralWriter : Writer, Closeable {
     protected var lastOffset = 0L
         get() = field
 
+    private var lastString: ByteArray = byteArrayOf()
+
     init {
         if (!Files.exists(Path.of(prefix))) {
             Files.createDirectory(Path.of(prefix))
         }
     }
 
-    override fun write(op: DBOperation) {
+    fun write(op: DBOperation, sharePrefix: Boolean = true) {
         lastOffset = writer?.filePointer!!
         val vType = if (op.v is Int) DataType.INT else DataType.STRING
         if (vType == DataType.STRING) {
-            write(op.op, vType, op.k, (op.v as String))
+            write(op.op, vType, op.k, (op.v as String), sharePrefix)
         } else {
-            write(op.op, vType, op.k, op.v as Int)
+            write(op.op, vType, op.k, op.v as Int, sharePrefix)
         }
     }
 
     abstract fun reset()
 
-    private fun writeInt(_v: Int) {
+    private fun writeVint(_v: Int) {
         var v = _v
         while (v and 0x7F.inv() != 0) {
             writer!!.write((v and 0x7F or 0x80))
@@ -49,10 +51,31 @@ abstract class GeneralWriter : Writer, Closeable {
         writer!!.write(v)
     }
 
-    private fun writeString(s: String) {
-        val bytes = s.encodeToByteArray()
+    protected fun writeKeySharingPrefix(key: String) {
+        val bytes = key.toByteArray()
+        var sharedPrefix = 0
+
+        for (i in lastString.indices) {
+            if (lastString[i] == bytes[i]) sharedPrefix++
+            else break
+        }
+
+        lastString = bytes
+
+        writeVint(sharedPrefix)
+        writeString(bytes.sliceArray(sharedPrefix until bytes.size))
+    }
+
+    protected fun writeWithoutSharingPrefix(key: String) {
+        val bytes = key.toByteArray()
+        lastString = bytes
+        writeVint(0)
+        writeString(bytes)
+    }
+
+    private fun writeString(bytes: ByteArray) {
         val len = bytes.size
-        writeInt(len)
+        writeVint(len)
         writeBytes(bytes)
     }
 
@@ -64,7 +87,7 @@ abstract class GeneralWriter : Writer, Closeable {
         writer?.close()
     }
 
-    private fun writeTypeInfo(
+    private fun writeKvMeta(
         op: OperationType,
         vType: DataType
     ) {
@@ -75,22 +98,30 @@ abstract class GeneralWriter : Writer, Closeable {
         op: OperationType,
         vType: DataType,
         k: String,
-        v: String
+        v: String,
+        sharePrefix: Boolean = true
     ) {
-        writeTypeInfo(op, vType)
-        writeString(k)
-        writeString(v)
+        writeKvMeta(op, vType)
+        if (sharePrefix)
+            writeKeySharingPrefix(k)
+        else
+            writeWithoutSharingPrefix(k)
+        writeString(v.toByteArray())
     }
 
     private fun write(
         op: OperationType,
         vType: DataType,
         k: String,
-        v: Int
+        v: Int,
+        sharePrefix: Boolean = true
     ) {
-        writeTypeInfo(op, vType)
-        writeString(k)
-        writeInt(v)
+        writeKvMeta(op, vType)
+        if (sharePrefix)
+            writeKeySharingPrefix(k)
+        else
+            writeWithoutSharingPrefix(k)
+        writeVint(v)
     }
 
 }

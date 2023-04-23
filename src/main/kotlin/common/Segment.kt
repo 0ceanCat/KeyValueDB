@@ -21,11 +21,11 @@ class Segment(
         for (i in blocksOffset.indices) {
             val offset = blocksOffset[i]
             reader.seek(offset.toLong())
-            val key = reader.readKey()
+            val key = reader.readKeyIgnoringKvMeta()
             if (i < blocksOffset.size - 1)
                 sstable[key] = Block(path, offset, blocksOffset[i + 1])
             else
-                sstable[key] = Block(path, offset, Int.MAX_VALUE)
+                sstable[key] = Block(path, offset, metadata.blocksStartOffset)
         }
 
         reader.close()
@@ -42,30 +42,31 @@ class Segment(
         return this.id.compareTo(other.id)
     }
 
+    fun floorKey(key: String): String? {
+        return sstable.floorKey(key)
+    }
+
+    fun ceilingKey(key: String): String? {
+        return sstable.ceilingKey(key)
+    }
+
     companion object {
         fun overlap(sg1: Segment?, sg2: Segment?): Boolean {
             if (sg1 == null || sg2 == null) return false
-            return sg1.firstHigherThan(sg2) and sg1.lastLowerThan(sg2) or sg2.firstHigherThan(sg1) and sg2.lastLowerThan(
-                sg1
-            )
+            return sg1.firstHigherThan(sg2) && sg1.lastLowerThan(sg2) ||
+                    sg2.firstHigherThan(sg1) && sg2.lastLowerThan(sg1)
         }
     }
 
     val level = metadata.level
     val id = metadata.id
 
-    private fun contains(key: String): Boolean {
-        val lower = sstable.floorKey(key)
-        val higher = sstable.ceilingKey(key)
-        return lower != null && higher != null
-    }
-
     private fun firstHigherThan(other: Segment): Boolean {
-        return sstable.firstKey().compareTo(other.sstable.firstKey()) >= 0
+        return sstable.firstKey() >= other.sstable.firstKey()
     }
 
     private fun lastLowerThan(other: Segment): Boolean {
-        return sstable.lastKey().compareTo(other.sstable.lastKey()) >= 0
+        return sstable.lastKey() <= other.sstable.lastKey()
     }
 
     override fun toString(): String {
@@ -76,14 +77,10 @@ class Segment(
         return id
     }
 
-    fun getPossibleBlock(key: String):Block? {
-        if (contains(key)){
-            val lower = sstable.floorEntry(key)
-            val higher = sstable.ceilingEntry(key)
-            if (lower === higher) return lower.value
-            return Block(path, lower.value.startOffset, higher.value.startOffset)
-        }
-        return null
+    fun getPossibleBlock(key: String): Block {
+        val lower = sstable.floorEntry(key)
+        val higher = sstable.ceilingEntry(key)
+        return lower.value
     }
 
 }

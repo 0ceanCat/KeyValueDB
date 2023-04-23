@@ -79,7 +79,7 @@ class Database : Closeable {
     private fun writeToDisc(table: MemoryTable) {
         tableWriter.reset()
         println("write data to ${tableWriter.currentPath}...")
-        tableWriter.reserveSpaceForMetadata(SegmentMetadata.nOfbytesForMetadata)
+        tableWriter.reserveSpaceForMetadata()
         for (entry in table) {
             tableWriter.write(entry.value)
         }

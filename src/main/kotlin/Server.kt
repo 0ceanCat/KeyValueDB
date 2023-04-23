@@ -10,8 +10,6 @@ import java.net.Socket
 
 class Server(val port: Int = 8000) {
     private val database: Database
-    private val searcher = Searcher()
-
     init {
         val reloadedOperations = checkWAL()
         database = Database()

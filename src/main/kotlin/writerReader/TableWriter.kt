@@ -29,24 +29,28 @@ class TableWriter : GeneralWriter() {
 
     private val blockOffsets = mutableListOf<Int>()
 
+    private var sharePrefix = false
+
     var currentPath = ""
         get() = field
 
-    fun reserveSpaceForMetadata(nBytes: Int) {
+    fun reserveSpaceForMetadata() {
         val wt = writer!!
-        for (i in 1..nBytes) {
+        for (i in 1..SegmentMetadata.nOfbytesForMetadata) {
             wt.write(0)
         }
         pointer = wt.filePointer
     }
 
-    override fun write(op: DBOperation) {
+    fun write(op: DBOperation) {
         val wt = writer!!
         lastKeyValueOffset = wt.filePointer
-        super.write(op)
+        super.write(op, sharePrefix)
+        sharePrefix = true
         if (wt.filePointer - pointer >= Config.BLOCK_SIZE) {
             blockOffsets += pointer.toInt()
             pointer = wt.filePointer
+            sharePrefix = false
         }
     }
 
@@ -63,16 +67,23 @@ class TableWriter : GeneralWriter() {
     }
 
     fun fillMetadata(level: Int = 0) {
-        blockOffsets += lastKeyValueOffset.toInt() // add the offset of the last key-value pair
         val wt = writer!!
+        val currentPointer = wt.filePointer
         wt.seek(0)
         wt.write(level)
+        writeInt(currentPointer.toInt())
+        wt.seek(currentPointer)
         for (checkpoint in blockOffsets) {
-            var cp = checkpoint
-            for (i in 1..SegmentMetadata.bytesPerBlockOffset) {
-                wt.write(cp and 0xff)
-                cp = cp shr 8
-            }
+            writeInt(checkpoint)
+        }
+    }
+
+    private fun writeInt(n: Int) {
+        val wt = writer!!
+        var v = n
+        for (i in 1..4) {
+            wt.write(v and 0xff)
+            v = v shr 8
         }
     }
 }
