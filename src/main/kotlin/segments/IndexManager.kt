@@ -1,6 +1,5 @@
-package writerReader
+package segments
 
-import common.Segment
 import common.Utils
 import java.util.*
 import kotlin.Comparator

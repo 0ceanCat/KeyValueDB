@@ -1,8 +1,8 @@
 package writerReader
 
 import common.DBOperation
-import common.DataType
-import common.OperationType
+import enums.DataType
+import enums.OperationType
 import java.io.Closeable
 import java.io.RandomAccessFile
 import java.nio.file.Files
@@ -42,14 +42,19 @@ abstract class GeneralWriter : Closeable {
 
     abstract fun reset()
 
-    private fun writeVint(_v: Int) {
+    protected fun writeVint(_v: Int) {
+        writeVLong(_v.toLong())
+    }
+
+    protected fun writeVLong(_v: Long) {
         var v = _v
-        while (v and 0x7F.inv() != 0) {
-            writer!!.write((v and 0x7F or 0x80))
+        while ((v and 0x7F.inv()) != 0L) {
+            writer?.write((v and 0x7F or 0x80).toInt())
             v = v ushr 7
         }
-        writer!!.write(v)
+        writer?.write(v.toInt())
     }
+
 
     protected fun writeKeySharingPrefix(key: String) {
         val bytes = key.toByteArray()
@@ -91,7 +96,7 @@ abstract class GeneralWriter : Closeable {
         op: OperationType,
         vType: DataType
     ) {
-        writer!!.write(op.id + vType.id)
+        writer?.write(op.id + vType.id)
     }
 
     private fun write(

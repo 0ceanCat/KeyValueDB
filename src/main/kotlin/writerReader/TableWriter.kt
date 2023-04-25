@@ -1,8 +1,9 @@
 package writerReader
 
+import bloom.Bloom
 import common.Config
 import common.DBOperation
-import common.SegmentMetadata
+import segments.SegmentMetadata
 import common.Utils
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
@@ -31,10 +32,15 @@ class TableWriter : GeneralWriter() {
 
     private var sharePrefix = false
 
+    private var filter: Bloom? = null
+
     var currentPath = ""
         get() = field
 
+    private var currentID = id.get()
+
     fun reserveSpaceForMetadata() {
+        filter = Bloom(100, seed = currentID.toLong())
         val wt = writer!!
         for (i in 1..SegmentMetadata.nOfbytesForMetadata) {
             wt.write(0)
@@ -45,6 +51,7 @@ class TableWriter : GeneralWriter() {
     fun write(op: DBOperation) {
         val wt = writer!!
         lastKeyValueOffset = wt.filePointer
+        filter?.add(op.k)
         super.write(op, sharePrefix)
         sharePrefix = true
         if (wt.filePointer - pointer >= Config.BLOCK_SIZE) {
@@ -61,7 +68,9 @@ class TableWriter : GeneralWriter() {
 
     private fun startWrite() {
         currentPath = "${basicPath}_${id.incrementAndGet()}"
+        currentID = id.get()
         pointer = 0
+        filter = null
         blockOffsets.clear()
         writer = RandomAccessFile("$prefix/$currentPath", "rws")
     }
@@ -69,14 +78,18 @@ class TableWriter : GeneralWriter() {
     fun fillMetadata(level: Int = 0) {
         val wt = writer!!
         val currentPointer = wt.filePointer
+        blockOffsets += lastKeyValueOffset.toInt()
+        writeVint(blockOffsets.size)
+        for (checkpoint in blockOffsets) {
+            writeVint(checkpoint)
+        }
+        writeFilter()
+
         wt.seek(0)
         wt.write(level)
         writeInt(currentPointer.toInt())
-        wt.seek(currentPointer)
-        for (checkpoint in blockOffsets) {
-            writeInt(checkpoint)
-        }
     }
+
 
     private fun writeInt(n: Int) {
         val wt = writer!!
@@ -84,6 +97,16 @@ class TableWriter : GeneralWriter() {
         for (i in 1..4) {
             wt.write(v and 0xff)
             v = v shr 8
+        }
+    }
+
+    private fun writeFilter() {
+        val f = filter!!
+        writeVint(f.seed.toInt())
+        writeVint(f.k)
+        writeVint(f.bitmap.size)
+        for (l in f.bitmap) {
+            writeVLong(l)
         }
     }
 }

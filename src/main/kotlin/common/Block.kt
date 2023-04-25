@@ -1,5 +1,6 @@
 package common
 
+import enums.OperationType
 import writerReader.IndexReader
 import java.io.File
 

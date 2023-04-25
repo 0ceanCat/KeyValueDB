@@ -1,4 +1,4 @@
-package common
+package enums
 
 import java.security.InvalidParameterException
 

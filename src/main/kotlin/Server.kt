@@ -1,4 +1,6 @@
 import common.DBOperation
+import common.Database
+import segments.Merger
 import common.Utils
 import writerReader.GeneralWriter
 import writerReader.IndexReader

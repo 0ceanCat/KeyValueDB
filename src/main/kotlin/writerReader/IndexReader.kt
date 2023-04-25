@@ -1,6 +1,9 @@
 package writerReader
 
+import bloom.Bloom
 import common.*
+import enums.DataType
+import segments.SegmentMetadata
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -23,12 +26,26 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         val blocksStartOffset = readInt()
         val currentOffset = getFilePointer()
         seek(blocksStartOffset.toLong())
+
+        // read offsets
+        val numberOfBlocks = readVInt()
         val blocksOffset = mutableListOf<Int>()
-        for (i in 1..SegmentMetadata.numberOfBlocks)
-            blocksOffset += readInt()
+        for (i in 1..numberOfBlocks)
+            blocksOffset += readVInt()
+
+        // read filter
+        val seed = readVInt()
+        val k = readVInt()
+        val bitMapSize = readVInt()
+        val bitMap = LongArray(bitMapSize)
+        for (i in 0 until bitMapSize) {
+            bitMap[i] = readVLong()
+        }
         seek(currentOffset)
-        metadata = SegmentMetadata(level, blocksStartOffset, fileId, blocksOffset)
-        return metadata as SegmentMetadata
+        return SegmentMetadata(
+            level, blocksStartOffset, fileId,
+            blocksOffset, Bloom.restore(bitMap, seed.toLong(), k)
+        )
     }
 
     override fun iterator(): Iterator<DBOperation?> {
@@ -53,8 +70,12 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
         override fun next(): DBOperation? {
             val r = current
-            val operation = getNextOperation()
-            current = operation
+            if (reader.filePointer >= metadata.blocksStartOffset) {
+                current = null
+            } else {
+                val operation = getNextOperation()
+                current = operation
+            }
             return r
         }
 
@@ -73,7 +94,7 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         val v: Any
 
         if (meta.vType == DataType.INT) {
-            v = readVint()
+            v = readVInt()
             if (v == -1) return null
         } else {
             v = readString()
@@ -111,8 +132,12 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         return v
     }
 
-    private fun readVint(): Int {
-        var readN = reader.read()
+    private fun readVInt(): Int {
+        return readVLong().toInt()
+    }
+
+    private fun readVLong(): Long {
+        var readN = reader.read().toLong()
         // the highest bit indicates if there are more bytes to be read
         // so, we only need the last 7 bits
         // 0x7f == 1111111
@@ -120,8 +145,8 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
         var shift = 7
         // 0x80 == 10000000
-        while ((readN and 0x80) != 0) {
-            readN = reader.read()
+        while ((readN and 0x80) != 0L) {
+            readN = reader.read().toLong()
             v = v or ((readN and 0x7F) shl shift)
             shift += 7
         }
@@ -130,15 +155,15 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
     }
 
     private fun readString(): String {
-        val vLen = readVint()
+        val vLen = readVInt()
         val vBytes = ByteArray(vLen)
         reader.read(vBytes)
         return String(vBytes)
     }
 
     private fun readKey(): String {
-        val prefix = readVint()
-        val kLen = readVint()
+        val prefix = readVInt()
+        val kLen = readVInt()
         val kBytes = ByteArray(kLen)
         reader.read(kBytes)
         val currentBytes = lastString.sliceArray(0 until prefix) + kBytes

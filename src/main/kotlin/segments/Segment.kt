@@ -1,5 +1,6 @@
-package common
+package segments
 
+import common.Block
 import writerReader.IndexReader
 import java.io.File
 import java.util.*
@@ -16,7 +17,11 @@ class Segment(
         val reader = IndexReader(f)
         metadata = reader.readMetadata()
         sstable = TreeMap<String, Block>()
+        reader.close()
+    }
 
+    private fun loadBlocksFromDisc() {
+        val reader = IndexReader(File(path))
         val blocksOffset = metadata.blocksOffset
         for (i in blocksOffset.indices) {
             val offset = blocksOffset[i]
@@ -27,9 +32,28 @@ class Segment(
             else
                 sstable[key] = Block(path, offset, metadata.blocksStartOffset)
         }
-
         reader.close()
     }
+
+    private fun loadOnlyFirstAndLastBlocks() {
+        if (!sstable.isEmpty()) return
+
+        val reader = IndexReader(File(path))
+        val blocksOffset = metadata.blocksOffset
+
+        val firstAndLast = listOf(blocksOffset.first(), blocksOffset.last())
+        for ((i, offset) in firstAndLast.withIndex()) {
+            reader.seek(offset.toLong())
+            val key = reader.readKeyIgnoringKvMeta()
+            if (i < firstAndLast.size - 1)
+                sstable[key] = Block(path, offset, firstAndLast[0 + 1])
+            else{
+                sstable[key] = Block(path, offset, metadata.blocksStartOffset)
+            }
+        }
+        reader.close()
+    }
+
 
     override fun equals(other: Any?): Boolean {
         if (other is Segment)
@@ -42,12 +66,8 @@ class Segment(
         return this.id.compareTo(other.id)
     }
 
-    fun floorKey(key: String): String? {
-        return sstable.floorKey(key)
-    }
-
-    fun ceilingKey(key: String): String? {
-        return sstable.ceilingKey(key)
+    fun mayContains(key: String): Boolean {
+        return metadata.filter.exists(key)
     }
 
     companion object {
@@ -62,11 +82,21 @@ class Segment(
     val id = metadata.id
 
     private fun firstHigherThan(other: Segment): Boolean {
-        return sstable.firstKey() >= other.sstable.firstKey()
+        return firstKey() >= other.firstKey()
     }
 
     private fun lastLowerThan(other: Segment): Boolean {
-        return sstable.lastKey() <= other.sstable.lastKey()
+        return lastKey() <= other.lastKey()
+    }
+
+    private fun firstKey(): String {
+        loadOnlyFirstAndLastBlocks()
+        return sstable.firstKey()
+    }
+
+    private fun lastKey(): String {
+        loadOnlyFirstAndLastBlocks()
+        return sstable.lastKey()
     }
 
     override fun toString(): String {
@@ -78,9 +108,8 @@ class Segment(
     }
 
     fun getPossibleBlock(key: String): Block {
-        val lower = sstable.floorEntry(key)
-        val higher = sstable.ceilingEntry(key)
-        return lower.value
+        if (sstable.isEmpty()) loadBlocksFromDisc()
+        return sstable.floorEntry(key).value
     }
 
 }

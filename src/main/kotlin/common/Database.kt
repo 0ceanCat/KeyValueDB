@@ -1,7 +1,8 @@
-import common.Config
-import common.DBOperation
-import common.OperationType
-import common.SegmentMetadata
+package common
+
+import enums.OperationType
+import segments.Merger
+import segments.Searcher
 import writerReader.TableWriter
 import writerReader.WAL
 import java.io.Closeable

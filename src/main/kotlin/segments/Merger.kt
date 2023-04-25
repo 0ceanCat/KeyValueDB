@@ -1,6 +1,5 @@
-import common.Segment
-import common.SegmentMetadata
-import writerReader.IndexManager
+package segments
+
 import writerReader.IndexReader
 import writerReader.TableWriter
 import java.io.File
@@ -68,11 +67,10 @@ object Merger : Thread() {
                 }
             }
 
-            if (minReader.first.getFilePointer().toInt() >= minReader.first.metadata?.blocksStartOffset!!){
+            minReader.second.next()
+            if (minReader.second.current() == null) {
                 readers -= minReader
                 minReader.first.closeAndRemove()
-            }else{
-                minReader.second.next()
             }
 
             minDBOperation?.let { tableWriter.write(it) }
