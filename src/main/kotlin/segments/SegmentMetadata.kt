@@ -1,11 +1,9 @@
 package segments
 
 import bloom.Bloom
-import common.Config
-import kotlin.math.ceil
 
 class SegmentMetadata(
-    val level: Int, val blocksStartOffset: Int,
+    val level: Int, val footerStartOffset: Int,
     val id: Int, _blocksOffset: List<Int>,
     val filter: Bloom
 ) {

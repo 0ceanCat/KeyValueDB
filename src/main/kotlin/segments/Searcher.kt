@@ -2,7 +2,7 @@ package segments
 
 class Searcher {
 
-    val sstables: MutableList<Segment> = IndexManager.indexes
+    private val sstables: MutableList<Segment> = IndexManager.indexes
 
     fun searchFromDisc(key: String): Any? {
         for (sstable in sstables) {

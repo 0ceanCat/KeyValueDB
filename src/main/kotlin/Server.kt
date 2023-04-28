@@ -2,6 +2,7 @@ import common.DBOperation
 import common.Database
 import segments.Merger
 import common.Utils
+import enums.OperationType
 import writerReader.GeneralWriter
 import writerReader.IndexReader
 import writerReader.WAL
@@ -12,11 +13,16 @@ import java.net.Socket
 
 class Server(val port: Int = 8000) {
     private val database: Database
+
     init {
         val reloadedOperations = checkWAL()
         database = Database()
-        for (op in reloadedOperations)
-            database.insert(op.k, op.v)
+        for (op in reloadedOperations) {
+            if (op.op == OperationType.INSERT)
+                database.insert(op.k, op.v)
+            else
+                database.delete(op.k)
+        }
         Merger.start()
     }
 
@@ -47,13 +53,13 @@ class Server(val port: Int = 8000) {
                         "set" -> {
                             try {
                                 val key = strings[1].trim()
-                                if (strings.size > 2){
+                                if (strings.size > 2) {
                                     val vString = strings.subList(2, strings.size).joinToString(" ")
                                     val v = vString.toIntOrNull() ?: vString
                                     database.insert(key, v)
                                     output.writeObject("success")
                                     println("Set $key to $v")
-                                }else{
+                                } else {
                                     output.writeObject("rip")
                                 }
                             } catch (e: Exception) {
@@ -70,8 +76,18 @@ class Server(val port: Int = 8000) {
                                 value?.let {
                                     output.writeObject(value)
                                     value
-                                }?:let { output.writeObject("null") }
+                                } ?: let { output.writeObject("null") }
 
+                            }
+                        }
+
+                        "del" -> {
+                            if (strings.size != 2) {
+                                output.writeObject("ah?")
+                            } else {
+                                val key = strings[1].trim()
+                                database.delete(key)
+                                output.writeObject("success")
                             }
                         }
 

@@ -23,9 +23,9 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
     fun readMetadata(): SegmentMetadata {
         val level = readLevel()
-        val blocksStartOffset = readInt()
+        val footerStartOffset = readInt()
         val currentOffset = getFilePointer()
-        seek(blocksStartOffset.toLong())
+        seek(footerStartOffset.toLong())
 
         // read offsets
         val numberOfBlocks = readVInt()
@@ -41,9 +41,10 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         for (i in 0 until bitMapSize) {
             bitMap[i] = readVLong()
         }
+        
         seek(currentOffset)
         return SegmentMetadata(
-            level, blocksStartOffset, fileId,
+            level, footerStartOffset, fileId,
             blocksOffset, Bloom.restore(bitMap, seed.toLong(), k)
         )
     }
@@ -70,7 +71,7 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
 
         override fun next(): DBOperation? {
             val r = current
-            if (reader.filePointer >= metadata.blocksStartOffset) {
+            if (reader.filePointer >= metadata.footerStartOffset) {
                 current = null
             } else {
                 val operation = getNextOperation()

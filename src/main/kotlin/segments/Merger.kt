@@ -78,6 +78,7 @@ object Merger : Thread() {
         tableWriter.fillMetadata(level)
         tableWriter.close()
         IndexManager.remove(paths)
+        IndexManager.loadNewSegmentAndNotifyMerger(tableWriter.currentPath)
         println("merge finished...")
     }
 

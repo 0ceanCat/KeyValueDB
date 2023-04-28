@@ -1,7 +1,6 @@
 package common
 
 import java.io.File
-import java.util.Collections
 
 class Utils {
     companion object {
@@ -10,9 +9,8 @@ class Utils {
             val directory = File(dirc)
             if (directory.isDirectory) {
                 for (file in directory.listFiles()!!) {
-                    if (accept(file.name)) {
-                        res += file
-                    }
+                    if (accept(file.name))
+                        res.add(file)
                 }
             }
 

@@ -1,7 +1,7 @@
 package common
 
 import enums.OperationType
-import segments.Merger
+import segments.IndexManager
 import segments.Searcher
 import writerReader.TableWriter
 import writerReader.WAL
@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 
 class Database : Closeable {
     private var table = MemoryTable()
-    private val fullTables = LinkedList<MemoryTable>()
+    private val immutableTables = LinkedList<MemoryTable>()
     private var wal: WAL = WAL()
     private val tableWriter: TableWriter = TableWriter()
     private val writeWorker = Executors.newFixedThreadPool(1)
@@ -24,19 +24,25 @@ class Database : Closeable {
     }
 
     fun get(key: String): Any? {
-        var v = table.get(key)?.v
-        v = v ?: let {
-            for (t in fullTables) {
-                v = t.get(key)?.v
-                if (v != null) return v
-            }
-            v
-        }
+        val dbOperation = table.get(key)
+        if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
+
+        val v = searchFromImmutableTablesMemTables(key)
+
         return v ?: searcher.searchFromDisc(key)
     }
 
-    fun delete(key: String, v: Any) {
-        updateTable(OperationType.DELETE, key, v)
+    fun delete(key: String) {
+        updateTable(OperationType.DELETE, key, 0)
+    }
+
+    private fun searchFromImmutableTablesMemTables(key: String): Any? {
+        for (t in immutableTables) {
+            val dbOperation = t.get(key)
+            if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
+            if (dbOperation != null) return dbOperation.v
+        }
+        return null
     }
 
     private fun updateTable(op: OperationType, key: String, v: Any) {
@@ -50,14 +56,14 @@ class Database : Closeable {
         if (table.size >= threshold) {
             val toBeWritten = table
             table = MemoryTable()
-            fullTables.addLast(toBeWritten)
+            immutableTables.addLast(toBeWritten)
             val lastWal = wal
             wal = WAL()
             writeWorker.execute {
-                writeToDisc(toBeWritten)
-                Merger.tryMerge()
+                val path = writeToDisc(toBeWritten)
+                IndexManager.loadNewSegmentAndNotifyMerger(path)
                 lastWal.close()
-                fullTables.pollFirst()
+                immutableTables.pollFirst()
             }
 
         }
@@ -77,8 +83,9 @@ class Database : Closeable {
         wal.write(op)
     }
 
-    private fun writeToDisc(table: MemoryTable) {
+    private fun writeToDisc(table: MemoryTable): String {
         tableWriter.reset()
+        val currentPath = tableWriter.currentPath
         println("write data to ${tableWriter.currentPath}...")
         tableWriter.reserveSpaceForMetadata()
         for (entry in table) {
@@ -87,6 +94,7 @@ class Database : Closeable {
         tableWriter.fillMetadata()
         tableWriter.close()
         println("${tableWriter.currentPath} done")
+        return currentPath
     }
 
 }

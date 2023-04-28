@@ -34,8 +34,10 @@ class TableWriter : GeneralWriter() {
 
     private var filter: Bloom? = null
 
+    private var currentName = ""
+
     var currentPath = ""
-        get() = field
+        private set
 
     private var currentID = id.get()
 
@@ -67,29 +69,24 @@ class TableWriter : GeneralWriter() {
     }
 
     private fun startWrite() {
-        currentPath = "${basicPath}_${id.incrementAndGet()}"
+        currentName = "${basicPath}_${id.incrementAndGet()}"
+        currentPath = "$prefix/$currentName"
         currentID = id.get()
         pointer = 0
         filter = null
         blockOffsets.clear()
-        writer = RandomAccessFile("$prefix/$currentPath", "rws")
+        writer = RandomAccessFile(currentPath, "rws")
     }
 
     fun fillMetadata(level: Int = 0) {
         val wt = writer!!
-        val currentPointer = wt.filePointer
-        blockOffsets += lastKeyValueOffset.toInt()
-        writeVint(blockOffsets.size)
-        for (checkpoint in blockOffsets) {
-            writeVint(checkpoint)
-        }
-        writeFilter()
+        val footerStartOffset = wt.filePointer
+        writeFooter()
 
         wt.seek(0)
         wt.write(level)
-        writeInt(currentPointer.toInt())
+        writeInt(footerStartOffset.toInt())
     }
-
 
     private fun writeInt(n: Int) {
         val wt = writer!!
@@ -97,6 +94,19 @@ class TableWriter : GeneralWriter() {
         for (i in 1..4) {
             wt.write(v and 0xff)
             v = v shr 8
+        }
+    }
+
+
+    private fun writeFooter() {
+        writeBlocksOffset()
+        writeFilter()
+    }
+
+    private fun writeBlocksOffset() {
+        writeVint(blockOffsets.size)
+        for (checkpoint in blockOffsets) {
+            writeVint(checkpoint)
         }
     }
 
