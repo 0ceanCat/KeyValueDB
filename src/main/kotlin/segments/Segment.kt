@@ -66,7 +66,7 @@ class Segment(
     }
 
     fun mayContains(key: String): Boolean {
-        return metadata.filter.exists(key)
+        return metadata.filter.contains(key)
     }
 
     companion object {

@@ -49,10 +49,13 @@ object IndexManager {
     fun getOverlaps(): Set<Segment> {
         val overlaps = mutableSetOf<Segment>()
         for (f in newLoaded) {
-            val map = indexMap[f.metadata.level]!!
+            // only merge overlapping segments that are at the same level.
+            val map = indexMap[f.metadata.level]
             val current = readIndexNames[f.path]!!
-            val lower: Segment? = map.lower(current)
-            val higher: Segment? = map.higher(current)
+
+            // look for neighbors
+            val lower: Segment? = map?.lower(current)
+            val higher: Segment? = map?.higher(current)
             if (Segment.overlap(lower, current)) {
                 overlaps.add(lower!!)
                 overlaps.add(current)

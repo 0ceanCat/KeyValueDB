@@ -18,9 +18,8 @@ class Bloom(_n: Int, _p: Double = 0.1, val seed: Long) {
         private set
 
     init {
-        m = computeBitMapSize()
         k = computeNofHashs()
-        nOfLongInBitMap = ceil(m * 1.0 / BITS_LONG).toInt()
+        nOfLongInBitMap = ceil(computeBitMapSize() * 1.0 / BITS_LONG).toInt()
         bitmap = LongArray(nOfLongInBitMap)
         m = nOfLongInBitMap * BITS_LONG
         hashFunctions = UniversalHash(k, seed)
@@ -60,7 +59,7 @@ class Bloom(_n: Int, _p: Double = 0.1, val seed: Long) {
         return long and (1L shl (BITS_LONG - 1 - bitPos))
     }
 
-    fun exists(key: String): Boolean {
+    fun contains(key: String): Boolean {
         for (i in 0 until k) {
             if (getBit(hashFunctions!!.uniHash(key, i) % m) == 0L) return false
         }

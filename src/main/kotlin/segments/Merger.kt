@@ -41,7 +41,10 @@ object Merger : Thread() {
             val iterator = reader.iterator() as IndexReader.DBOperationIterator
             readers += Pair(reader, iterator)
         }
+
+        // merge level of the output segment
         val level = readers[0].second.metadata.level + 1
+
         val tableWriter = TableWriter()
         tableWriter.reset()
         tableWriter.reserveSpaceForMetadata()
@@ -49,24 +52,31 @@ object Merger : Thread() {
             var minDBOperation = readers[0].second.current()
             var minReader = readers[0]
             for (r in readers) {
+
+                // if the keys are identical, keep the recent one
                 while (r !== minReader && r.second.current() != null
                     && r.second.current()!!.k == minDBOperation!!.k
                 ) {
                     if (minReader.second.metadata.id < r.second.metadata.id) {
-                        // if r's id is higher, then its data is more recent
+                        // if id of r is higher, then its data is more recent
                         minReader.second.next()
                         minReader = r
                         minDBOperation = r.second.current()
                     } else {
+                        // r is older then minReade
                         r.second.next()
                     }
                 }
-                if (r.second.current() != null && r.second.current()!!.k.compareTo(minDBOperation!!.k) < 0) {
-                    minDBOperation = r.second.current()
+
+                val rCurrentRecord = r.second.current()
+                // if the keys are not the same, the smaller of the two will be written first.
+                if (rCurrentRecord != null && rCurrentRecord.k.compareTo(minDBOperation!!.k) < 0) {
+                    minDBOperation = rCurrentRecord
                     minReader = r
                 }
             }
 
+            // advance to the next key-value pair
             minReader.second.next()
             if (minReader.second.current() == null) {
                 readers -= minReader
