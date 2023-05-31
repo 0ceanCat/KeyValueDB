@@ -6,6 +6,7 @@ import common.DBOperation
 import segments.SegmentMetadata
 import common.Utils
 import java.io.RandomAccessFile
+import java.io.Writer
 import java.util.concurrent.atomic.AtomicInteger
 
 class TableWriter : GeneralWriter() {
@@ -82,7 +83,10 @@ class TableWriter : GeneralWriter() {
         val wt = writer!!
         val footerStartOffset = wt.filePointer
         writeFooter()
+        writeHeader(wt, level, footerStartOffset)
+    }
 
+    private fun writeHeader(wt: RandomAccessFile, level: Int, footerStartOffset: Long){
         wt.seek(0)
         wt.write(level)
         writeInt(footerStartOffset.toInt())
