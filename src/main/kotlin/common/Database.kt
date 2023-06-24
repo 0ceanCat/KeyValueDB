@@ -26,10 +26,11 @@ class Database : Closeable {
     fun get(key: String): Any? {
         val dbOperation = table.get(key)
         if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
+        if (dbOperation != null && dbOperation.op == OperationType.INSERT) return dbOperation.v
 
         val v = searchFromImmutableTablesMemTables(key)
 
-        return v ?: searcher.searchFromDisc(key)
+        return v ?: searcher.searchFromSStable(key)
     }
 
     fun delete(key: String) {
@@ -46,7 +47,7 @@ class Database : Closeable {
     }
 
     private fun updateTable(op: OperationType, key: String, v: Any) {
-        val dbOperation = DBOperation(op, key, v)
+        val dbOperation = DBRecord(op, key, v)
         writeWAL(dbOperation)
         table.put(key, dbOperation)
         checkThreshold()
@@ -79,7 +80,7 @@ class Database : Closeable {
         wal.reset()
     }
 
-    private fun writeWAL(op: DBOperation) {
+    private fun writeWAL(op: DBRecord) {
         wal.write(op)
     }
 
@@ -87,7 +88,7 @@ class Database : Closeable {
         tableWriter.reset()
         val currentPath = tableWriter.currentPath
         println("write data to ${tableWriter.currentPath}...")
-        tableWriter.reserveSpaceForMetadata()
+        tableWriter.reserveSpaceForHeader()
         for (entry in table) {
             tableWriter.write(entry.value)
         }

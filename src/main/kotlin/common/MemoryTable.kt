@@ -1,12 +1,11 @@
 package common
 
-import bloom.Bloom
 import segments.SegmentMetadata
 import java.util.*
 import kotlin.collections.HashMap
 
-class MemoryTable : Iterable<MutableMap.MutableEntry<String, DBOperation>> {
-    private val table = TreeMap<String, DBOperation>()
+class MemoryTable : Iterable<MutableMap.MutableEntry<String, DBRecord>> {
+    private val table = TreeMap<String, DBRecord>()
     private val sizes = HashMap<String, Int>()
 
     var size = 0
@@ -27,11 +26,11 @@ class MemoryTable : Iterable<MutableMap.MutableEntry<String, DBOperation>> {
         val sizePerBlock = 16 //1024 * 16 // 16kb
     }
 
-    fun get(key: String): DBOperation? {
+    fun get(key: String): DBRecord? {
         return table[key]
     }
 
-    fun put(key: String, value: DBOperation) {
+    fun put(key: String, value: DBRecord) {
         val kvSize = updateSize(key, value.v)
         table[key] = value
         sizes[key] = kvSize
@@ -83,7 +82,7 @@ class MemoryTable : Iterable<MutableMap.MutableEntry<String, DBOperation>> {
         return v.toByteArray().size + vIntSize(v.length)
     }
 
-    override fun iterator(): Iterator<MutableMap.MutableEntry<String, DBOperation>> {
+    override fun iterator(): Iterator<MutableMap.MutableEntry<String, DBRecord>> {
         return table.iterator()
     }
 }

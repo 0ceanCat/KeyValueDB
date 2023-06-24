@@ -28,6 +28,7 @@ class Bloom(_n: Int, _p: Double = 0.1, val seed: Long) {
     companion object {
         private val BITS_LONG = 64
 
+        // load from disk
         fun restore(longArray: LongArray, seed: Long, k: Int): Bloom {
             val filter = Bloom(1, 0.1, seed)
             filter.bitmap = longArray
@@ -36,7 +37,22 @@ class Bloom(_n: Int, _p: Double = 0.1, val seed: Long) {
             return filter
         }
     }
+    // verify if the filter contains the given key
+    fun contains(key: String): Boolean {
+        val hashFunctions_ = hashFunctions!!
+        for (i in 0 until k) {
+            if (getBit(hashFunctions_.uniHash(key, i) % m) == 0L) return false
+        }
+        return true
+    }
 
+    // add a new key into the filter
+    fun add(key: String) {
+        val hashFunctions_ = hashFunctions!!
+        for (i in 0 until k) {
+            setBitToOne(hashFunctions_.uniHash(key, i) % m)
+        }
+    }
     private fun computeNofHashs(): Int {
         return max(1, ((m / n) * ln(2.0)).toInt())
     }
@@ -57,18 +73,5 @@ class Bloom(_n: Int, _p: Double = 0.1, val seed: Long) {
         val bitPos = bitOffset % BITS_LONG
         val long = bitmap[longOffset]
         return long and (1L shl (BITS_LONG - 1 - bitPos))
-    }
-
-    fun contains(key: String): Boolean {
-        for (i in 0 until k) {
-            if (getBit(hashFunctions!!.uniHash(key, i) % m) == 0L) return false
-        }
-        return true
-    }
-
-    fun add(key: String) {
-        for (i in 0 until k) {
-            setBitToOne(hashFunctions!!.uniHash(key, i) % m)
-        }
     }
 }

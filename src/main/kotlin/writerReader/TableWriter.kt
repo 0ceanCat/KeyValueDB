@@ -2,11 +2,11 @@ package writerReader
 
 import bloom.Bloom
 import common.Config
-import common.DBOperation
+import common.Config.Companion.BLOOM_FILTER_SIZE
+import common.DBRecord
 import segments.SegmentMetadata
 import common.Utils
 import java.io.RandomAccessFile
-import java.io.Writer
 import java.util.concurrent.atomic.AtomicInteger
 
 class TableWriter : GeneralWriter() {
@@ -29,7 +29,7 @@ class TableWriter : GeneralWriter() {
 
     private var lastKeyValueOffset = 0L
 
-    private val blockOffsets = mutableListOf<Int>()
+    private val blocksOffset = mutableListOf<Int>()
 
     private var sharePrefix = false
 
@@ -42,8 +42,9 @@ class TableWriter : GeneralWriter() {
 
     private var currentID = id.get()
 
-    fun reserveSpaceForMetadata() {
-        filter = Bloom(100, seed = currentID.toLong())
+    // reserve space for header
+    fun reserveSpaceForHeader() {
+        filter = Bloom(BLOOM_FILTER_SIZE, seed = currentID.toLong())
         val wt = writer!!
         for (i in 1..SegmentMetadata.nOfbytesForMetadata) {
             wt.write(0)
@@ -51,15 +52,22 @@ class TableWriter : GeneralWriter() {
         pointer = wt.filePointer
     }
 
-    fun write(op: DBOperation) {
+    // write a record to disk
+    fun write(op: DBRecord) {
         val wt = writer!!
         lastKeyValueOffset = wt.filePointer
-        filter?.add(op.k)
+        filter?.add(op.k) // insert it to the bloom filter
         super.write(op, sharePrefix)
+        // start sharing prefix
         sharePrefix = true
+
+        // the current block is full, need to create a new block
         if (wt.filePointer - pointer >= Config.BLOCK_SIZE) {
-            blockOffsets += pointer.toInt()
+            // store the start offset of the last block
+            blocksOffset += pointer.toInt()
+            // update the pointer
             pointer = wt.filePointer
+            // stop sharing prefix with the previous block
             sharePrefix = false
         }
     }
@@ -75,14 +83,19 @@ class TableWriter : GeneralWriter() {
         currentID = id.get()
         pointer = 0
         filter = null
-        blockOffsets.clear()
+        blocksOffset.clear()
         writer = RandomAccessFile(currentPath, "rws")
     }
 
+    // write segment's metadata to disc
     fun fillMetadata(level: Int = 0) {
         val wt = writer!!
         val footerStartOffset = wt.filePointer
+
+        // write footer
         writeFooter()
+
+        // write header
         writeHeader(wt, level, footerStartOffset)
     }
 
@@ -108,8 +121,10 @@ class TableWriter : GeneralWriter() {
     }
 
     private fun writeBlocksOffset() {
-        writeVint(blockOffsets.size)
-        for (checkpoint in blockOffsets) {
+        writeVint(blocksOffset.size) // write the number of blocks
+
+        // write the blocks offset
+        for (checkpoint in blocksOffset) {
             writeVint(checkpoint)
         }
     }

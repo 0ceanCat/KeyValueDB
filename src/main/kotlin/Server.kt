@@ -1,4 +1,4 @@
-import common.DBOperation
+import common.DBRecord
 import common.Database
 import segments.Merger
 import common.Utils
@@ -15,6 +15,9 @@ class Server(val port: Int = 8000) {
     private val database: Database
 
     init {
+        // init database
+
+        // check the WAL file and reload the records to memory
         val reloadedOperations = checkWAL()
         database = Database()
         for (op in reloadedOperations) {
@@ -23,18 +26,20 @@ class Server(val port: Int = 8000) {
             else
                 database.delete(op.k)
         }
+
+        // start the Merger thread
         Merger.start()
     }
 
-    private fun checkWAL(): List<DBOperation> {
-        val operations = mutableListOf<DBOperation>()
+    private fun checkWAL(): List<DBRecord> {
+        val operations = mutableListOf<DBRecord>()
         for (f in Utils.readFilesFrom(GeneralWriter.prefix) { it.startsWith(WAL.logFile) }) {
             println("realoding wal from ${f.name}...")
             val reader = IndexReader(f)
-            var dbOperation = reader.getNextOperation()
+            var dbOperation = reader.getNextRecord()
             while (dbOperation != null) {
                 operations += dbOperation
-                dbOperation = reader.getNextOperation()
+                dbOperation = reader.getNextRecord()
             }
             reader.closeAndRemove()
         }

@@ -7,7 +7,7 @@ import segments.SegmentMetadata
 import java.io.File
 import java.io.RandomAccessFile
 
-class IndexReader(private val f: File) : Iterable<DBOperation?> {
+open class IndexReader(private val f: File) : Iterable<DBRecord?> {
     private val reader: RandomAccessFile
     private val fileId: Int
     var metadata: SegmentMetadata? = null
@@ -41,7 +41,8 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         for (i in 0 until bitMapSize) {
             bitMap[i] = readVLong()
         }
-        
+
+        // reset file pointer
         seek(currentOffset)
         return SegmentMetadata(
             level, footerStartOffset, fileId,
@@ -49,12 +50,13 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         )
     }
 
-    override fun iterator(): Iterator<DBOperation?> {
-        return DBOperationIterator()
+    override fun iterator(): Iterator<DBRecord?> {
+        return DBRecordIterator()
     }
 
-    inner class DBOperationIterator : Iterator<DBOperation?> {
-        private var current: DBOperation?
+    // it does what you think
+    inner class DBRecordIterator : Iterator<DBRecord?> {
+        private var current: DBRecord?
         val metadata: SegmentMetadata
 
         init {
@@ -62,30 +64,30 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
                 this@IndexReader.metadata = readMetadata()
             }
             this.metadata = this@IndexReader.metadata!!
-            current = getNextOperation()
+            current = getNextRecord()
         }
 
         override fun hasNext(): Boolean {
             return current != null
         }
 
-        override fun next(): DBOperation? {
+        override fun next(): DBRecord? {
             val r = current
-            if (reader.filePointer >= metadata.footerStartOffset) {
-                current = null
+            current = if (reader.filePointer >= metadata.footerStartOffset) {
+                null
             } else {
-                val operation = getNextOperation()
-                current = operation
+                val operation = getNextRecord()
+                operation
             }
             return r
         }
 
-        fun current(): DBOperation? {
+        fun current(): DBRecord? {
             return current
         }
     }
 
-    fun getNextOperation(): DBOperation? {
+    open fun getNextRecord(): DBRecord? {
         val meta = readKVmeta()
 
         if (meta == null) return null
@@ -101,7 +103,7 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
             v = readString()
         }
 
-        return DBOperation(meta.op, key, v)
+        return DBRecord(meta.op, key, v)
     }
 
     fun seek(pos: Long) {
@@ -121,6 +123,10 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         f.delete()
     }
 
+    fun readKeyIgnoringKvMeta(): String {
+        reader.seek(reader.filePointer + 1)
+        return readKey()
+    }
     private fun readLevel(): Int {
         return reader.read()
     }
@@ -171,11 +177,6 @@ class IndexReader(private val f: File) : Iterable<DBOperation?> {
         val key = String(currentBytes)
         lastString = currentBytes
         return key
-    }
-
-    fun readKeyIgnoringKvMeta(): String {
-        reader.seek(reader.filePointer + 1)
-        return readKey()
     }
 
     private fun readKVmeta(): KVMetadata? {

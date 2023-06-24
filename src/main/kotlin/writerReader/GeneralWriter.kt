@@ -1,6 +1,6 @@
 package writerReader
 
-import common.DBOperation
+import common.DBRecord
 import enums.DataType
 import enums.OperationType
 import java.io.Closeable
@@ -30,12 +30,15 @@ abstract class GeneralWriter : Closeable {
         }
     }
 
-    fun write(op: DBOperation, sharePrefix: Boolean = true) {
+    // write a record to disk
+    fun write(op: DBRecord, sharePrefix: Boolean = true) {
         lastOffset = writer?.filePointer!!
         val vType = if (op.v is Int) DataType.INT else DataType.STRING
         if (vType == DataType.STRING) {
+            // the value is a string
             write(op.op, vType, op.k, (op.v as String), sharePrefix)
         } else {
+            // the value is an int
             write(op.op, vType, op.k, op.v as Int, sharePrefix)
         }
     }
@@ -47,12 +50,13 @@ abstract class GeneralWriter : Closeable {
     }
 
     protected fun writeVLong(_v: Long) {
+        val writer_ = writer!!
         var v = _v
         while ((v and 0x7F.inv()) != 0L) {
-            writer?.write((v and 0x7F or 0x80).toInt())
+            writer_.write((v and 0x7F or 0x80).toInt())
             v = v ushr 7
         }
-        writer?.write(v.toInt())
+        writer_.write(v.toInt())
     }
 
 
@@ -96,7 +100,7 @@ abstract class GeneralWriter : Closeable {
         op: OperationType,
         vType: DataType
     ) {
-        writer?.write(op.id + vType.id)
+        writer!!.write(op.id + vType.id)
     }
 
     private fun write(

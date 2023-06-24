@@ -8,9 +8,12 @@ class Utils {
             val res = mutableListOf<File>()
             val directory = File(dirc)
             if (directory.isDirectory) {
-                for (file in directory.listFiles()!!) {
-                    if (accept(file.name))
-                        res.add(file)
+                val listFiles = directory.listFiles()
+                listFiles?.let{
+                    for (file in listFiles) {
+                        if (accept(file.name))
+                            res.add(file)
+                    }
                 }
             }
 
@@ -20,5 +23,5 @@ class Utils {
 }
 
 fun main() {
-    println(Utils.readFilesFrom("./", { it.startsWith("binlog") }))
+
 }

@@ -10,19 +10,19 @@ class UniversalHash(hashNumber: Int, val seed: Long) {
         getRandomNumber(hashNumber + 1)
     }
 
-    private fun getRandomNumber(hashNumber: Int) {
-        val r = Random(seed)
-        for (i in 0 until hashNumber) {
-            random[i] = r.nextInt(p)
-        }
-    }
-
     fun uniHash(element: String, index: Int): Int {
         var hashcode = 0
         val bytes = element.toCharArray()
         for (b in bytes)
             hashcode += (random[index] * b.toInt() + random[index + 1]) % p
         return hashcode
+    }
+
+    private fun getRandomNumber(hashNumber: Int) {
+        val r = Random(seed)
+        for (i in 0 until hashNumber) {
+            random[i] = r.nextInt(p)
+        }
     }
 
 }
