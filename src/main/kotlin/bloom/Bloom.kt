@@ -39,18 +39,18 @@ class Bloom(_n: Int, _p: Double = 0.1, val seed: Long) {
     }
     // verify if the filter contains the given key
     fun contains(key: String): Boolean {
-        val hashFunctions_ = hashFunctions!!
+        val hashfunctions_ = hashFunctions!!
         for (i in 0 until k) {
-            if (getBit(hashFunctions_.uniHash(key, i) % m) == 0L) return false
+            if (getBit(hashfunctions_.uniHash(key, i) % m) == 0L) return false
         }
         return true
     }
 
-    // add a new key into the filter
+    // add a new key into filter
     fun add(key: String) {
-        val hashFunctions_ = hashFunctions!!
+        val hashfunctions_ = hashFunctions!!
         for (i in 0 until k) {
-            setBitToOne(hashFunctions_.uniHash(key, i) % m)
+            setBitToOne(hashfunctions_.uniHash(key, i) % m)
         }
     }
     private fun computeNofHashs(): Int {

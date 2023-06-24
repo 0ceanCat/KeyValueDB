@@ -8,6 +8,11 @@ import java.util.concurrent.locks.ReentrantLock
 object Merger : Thread() {
     private val lock = ReentrantLock()
     private val cond = lock.newCondition()
+
+    init {
+        name = "Merger-"
+    }
+
     override fun run() {
         while (true) {
             // get segments to be merged

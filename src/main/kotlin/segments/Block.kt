@@ -40,7 +40,7 @@ class Block(val path: String, val startOffset: Int, val endOffset: Int){
 
     fun readingFinish(){
         reader?.close()
-        nextRecordOffset = 0
+        nextRecordOffset = -1L
         reader = null
     }
     private fun goToNextRecordOffset() {
