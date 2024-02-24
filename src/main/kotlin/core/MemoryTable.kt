@@ -1,5 +1,6 @@
-package common
+package core
 
+import common.DBRecord
 import segments.SegmentMetadata
 import java.util.*
 import kotlin.collections.Map.Entry

@@ -1,5 +1,7 @@
-package common
+package core
 
+import common.Config
+import common.DBRecord
 import enums.OperationType
 import segments.IndexManager
 import segments.Searcher
@@ -13,10 +15,10 @@ class Database : Closeable {
     private var table = MemoryTable()
     private val immutableTables = LinkedList<MemoryTable>()
     private var wal: WAL = WAL()
-    private val tableWriter: TableWriter = TableWriter()
-    private val writeWorker = Executors.newFixedThreadPool(1)
+    private val discWriter = Executors.newFixedThreadPool(1)
     private val searcher = Searcher()
     private val threshold = Config.MEMORY_TABLE_THRESHOLD
+    private val lock = Any()
 
 
     fun insert(key: String, v: Any) {
@@ -37,20 +39,13 @@ class Database : Closeable {
         updateTable(OperationType.DELETE, key, 0)
     }
 
-    private fun searchFromImmutableTablesMemTables(key: String): Any? {
-        for (t in immutableTables) {
-            val dbOperation = t.get(key)
-            if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
-            if (dbOperation != null) return dbOperation.v
-        }
-        return null
-    }
-
     private fun updateTable(op: OperationType, key: String, v: Any) {
-        val dbOperation = DBRecord(op, key, v)
-        writeWAL(dbOperation)
-        table.put(key, dbOperation)
-        checkThreshold()
+        synchronized(lock){
+            val dbOperation = DBRecord(op, key, v)
+            writeWAL(dbOperation)
+            table.put(key, dbOperation)
+            checkThreshold()
+        }
     }
 
     private fun checkThreshold() {
@@ -60,7 +55,7 @@ class Database : Closeable {
             immutableTables.addLast(toBeWritten)
             val lastWal = wal
             wal = WAL()
-            writeWorker.execute {
+            discWriter.execute {
                 val path = writeToDisc(toBeWritten)
                 IndexManager.loadNewSegmentAndNotifyMerger(path)
                 lastWal.close()
@@ -72,7 +67,6 @@ class Database : Closeable {
 
     override fun close() {
         writeToDisc(table)
-        tableWriter.close()
         wal.close()
     }
 
@@ -85,6 +79,7 @@ class Database : Closeable {
     }
 
     private fun writeToDisc(table: MemoryTable): String {
+        val tableWriter = TableWriter()
         tableWriter.reset()
         val currentPath = tableWriter.currentPath
         println("write data to ${tableWriter.currentPath}...")
@@ -98,4 +93,12 @@ class Database : Closeable {
         return currentPath
     }
 
+    private fun searchFromImmutableTablesMemTables(key: String): Any? {
+        for (t in immutableTables) {
+            val dbOperation = t.get(key)
+            if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
+            if (dbOperation != null) return dbOperation.v
+        }
+        return null
+    }
 }

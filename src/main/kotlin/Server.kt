@@ -1,17 +1,18 @@
 import common.DBRecord
-import common.Database
+import core.Database
 import segments.Merger
 import common.Utils
+import core.ClientHandler
 import enums.OperationType
-import reactor.Reactor
 import writerReader.GeneralWriter
 import writerReader.IndexReader
 import writerReader.WAL
+import java.net.ServerSocket
 
 class Server(private val port: Int = 8000) {
     private val database = Database()
 
-    private fun checkWAL(): List<DBRecord> {
+    private fun reloadFromWAL(): List<DBRecord> {
         val operations = mutableListOf<DBRecord>()
         for (f in Utils.readFilesFrom(GeneralWriter.prefix) { it.startsWith(WAL.logFile) }) {
             println("realoding wal from ${f.name}...")
@@ -30,7 +31,7 @@ class Server(private val port: Int = 8000) {
         // init database
 
         // check the WAL file and reload the records to memory
-        val reloadedOperations = checkWAL()
+        val reloadedOperations = reloadFromWAL()
         for (op in reloadedOperations) {
             if (op.op == OperationType.INSERT)
                 database.insert(op.k, op.v)
@@ -41,7 +42,18 @@ class Server(private val port: Int = 8000) {
         // start the Merger thread
         Merger.start()
 
-        Reactor(port, database).start()
+        val server = ServerSocket(port)
+        println("Server started...")
+        println("Server is listening on port ${port}")
+        try {
+            while (true) {
+                val client = server.accept()
+                Thread.startVirtualThread(ClientHandler(database, client))
+            }
+        } finally {
+            println("shutdown...")
+            database.close()
+        }
     }
 }
 

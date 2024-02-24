@@ -31,7 +31,7 @@ abstract class GeneralWriter : Closeable {
     }
 
     // write a record to disk
-    fun write(op: DBRecord, sharePrefix: Boolean = true) {
+    open fun write(op: DBRecord, sharePrefix: Boolean = true) {
         lastOffset = writer?.filePointer!!
         val vType = if (op.v is Int) DataType.INT else DataType.STRING
         if (vType == DataType.STRING) {
@@ -103,7 +103,7 @@ abstract class GeneralWriter : Closeable {
         writer!!.write(op.id + vType.id)
     }
 
-    private fun write(
+    protected fun write(
         op: OperationType,
         vType: DataType,
         k: String,
@@ -118,7 +118,7 @@ abstract class GeneralWriter : Closeable {
         writeString(v.toByteArray())
     }
 
-    private fun write(
+    protected fun write(
         op: OperationType,
         vType: DataType,
         k: String,

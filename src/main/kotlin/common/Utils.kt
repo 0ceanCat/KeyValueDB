@@ -21,7 +21,3 @@ class Utils {
         }
     }
 }
-
-fun main() {
-
-}

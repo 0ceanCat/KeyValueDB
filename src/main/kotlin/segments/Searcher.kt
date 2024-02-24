@@ -4,6 +4,7 @@ import enums.OperationType
 
 class Searcher {
     private val sstables: MutableList<Segment> = IndexManager.indexes
+    private val lock = Any()
 
     // search the given key in the segments
     fun searchFromSStable(key: String): Any? {
