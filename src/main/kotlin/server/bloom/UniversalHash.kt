@@ -1,4 +1,4 @@
-package bloom
+package server.bloom
 
 import java.util.*
 

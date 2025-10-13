@@ -1,4 +1,4 @@
-package common
+package server
 
 class Config {
     companion object {

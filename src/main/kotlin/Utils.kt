@@ -1,5 +1,3 @@
-package common
-
 import java.io.File
 
 class Utils {

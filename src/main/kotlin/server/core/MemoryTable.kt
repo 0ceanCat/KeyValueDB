@@ -1,8 +1,7 @@
-package core
+package server.core
 
-import common.DBRecord
-import segments.SegmentMetadata
-import java.util.*
+import server.segments.SegmentMetadata
+import java.util.TreeMap
 import kotlin.collections.Map.Entry
 
 class MemoryTable : Iterable<Entry<String, DBRecord>> {

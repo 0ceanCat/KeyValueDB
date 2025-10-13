@@ -1,7 +1,7 @@
-package writerReader
+package server.writerReader
 
-import common.DBRecord
-import common.Utils
+import server.core.DBRecord
+import Utils
 import java.io.File
 import java.io.RandomAccessFile
 

@@ -1,7 +1,7 @@
-package segments
+package server.segments
 
-import common.DBRecord
-import writerReader.IndexReader
+import server.core.DBRecord
+import server.writerReader.IndexReader
 import java.io.File
 import java.util.TreeMap
 

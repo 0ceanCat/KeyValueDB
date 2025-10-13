@@ -1,8 +1,8 @@
-package segments
+package server.segments
 
-import common.Utils
+import Utils
 import java.io.File
-import java.util.*
+import java.util.TreeSet
 import kotlin.Comparator
 
 object IndexManager {

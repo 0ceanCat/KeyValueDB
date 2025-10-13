@@ -1,12 +1,13 @@
-import common.DBRecord
-import core.Database
-import segments.Merger
-import common.Utils
-import core.ClientHandler
-import enums.OperationType
-import writerReader.GeneralWriter
-import writerReader.IndexReader
-import writerReader.WAL
+package server
+
+import server.core.DBRecord
+import server.core.ClientHandler
+import server.core.Database
+import server.enums.OperationType
+import server.segments.Merger
+import server.writerReader.GeneralWriter
+import server.writerReader.IndexReader
+import server.writerReader.WAL
 import java.net.ServerSocket
 
 class Server(private val port: Int = 8000) {
@@ -43,8 +44,8 @@ class Server(private val port: Int = 8000) {
         Merger.start()
 
         val server = ServerSocket(port)
-        println("Server started...")
-        println("Server is listening on port ${port}")
+        println("server.Server started...")
+        println("server.Server is listening on port ${port}")
         try {
             while (true) {
                 val client = server.accept()

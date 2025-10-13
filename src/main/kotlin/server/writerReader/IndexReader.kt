@@ -1,10 +1,10 @@
-package writerReader
+package server.writerReader
 
-import bloom.Bloom
-import common.DBRecord
-import common.KVMetadata
-import enums.DataType
-import segments.SegmentMetadata
+import server.bloom.Bloom
+import server.core.DBRecord
+import server.core.KVMetadata
+import server.enums.DataType
+import server.segments.SegmentMetadata
 import java.io.File
 import java.io.RandomAccessFile
 

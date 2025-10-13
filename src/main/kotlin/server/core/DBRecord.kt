@@ -1,6 +1,7 @@
-package common
+package server.core
 
-import enums.OperationType
+import server.enums.OperationType
+
 
 class DBRecord(val op: OperationType, val k: String, val v: Any) {
     override fun toString(): String {

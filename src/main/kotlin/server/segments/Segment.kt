@@ -1,16 +1,15 @@
-package segments
+package server.segments
 
-import writerReader.IndexReader
+import server.writerReader.IndexReader
 import java.io.File
 import java.util.*
 
 class Segment(f: File) : Comparable<Segment> {
-    val path: String
+    val path: String = f.path
     val metadata: SegmentMetadata
     private val sstable: TreeMap<String, Block>
 
     init {
-        path = f.path
         val reader = IndexReader(f)
         metadata = reader.readMetadata()
         sstable = TreeMap<String, Block>()
@@ -23,7 +22,7 @@ class Segment(f: File) : Comparable<Segment> {
     companion object {
         // verify if 2 segments are overlapping
         fun overlap(sg1: Segment?, sg2: Segment?): Boolean {
-            if (sg1 == null || sg2 == null) return false
+            if (sg1 == null || sg1.isEmpty() || sg2 == null || sg2.isEmpty()) return false
             return !(sg1.lastKey() < sg2.firstKey() || sg2.lastKey() < sg1.firstKey())
         }
     }
@@ -100,5 +99,9 @@ class Segment(f: File) : Comparable<Segment> {
             }
         }
         reader.close()
+    }
+
+    fun isEmpty(): Boolean {
+        return sstable.isEmpty()
     }
 }

@@ -1,4 +1,4 @@
-package enums
+package server.enums
 
 import java.security.InvalidParameterException
 

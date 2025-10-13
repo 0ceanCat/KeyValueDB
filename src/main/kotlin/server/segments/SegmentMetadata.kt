@@ -1,6 +1,6 @@
-package segments
+package server.segments
 
-import bloom.Bloom
+import server.bloom.Bloom
 
 class SegmentMetadata(
     val level: Int,

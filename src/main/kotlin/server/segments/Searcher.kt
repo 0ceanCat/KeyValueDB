@@ -1,6 +1,6 @@
-package segments
+package server.segments
 
-import enums.OperationType
+import server.enums.OperationType
 
 class Searcher {
     private val sstables: MutableList<Segment> = IndexManager.indexes

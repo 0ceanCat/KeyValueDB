@@ -1,7 +1,7 @@
-package segments
+package server.segments
 
-import writerReader.IndexReader
-import writerReader.TableWriter
+import server.writerReader.IndexReader
+import server.writerReader.TableWriter
 import java.io.File
 import java.util.concurrent.locks.ReentrantLock
 

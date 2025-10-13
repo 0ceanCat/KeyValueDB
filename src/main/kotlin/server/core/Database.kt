@@ -1,12 +1,11 @@
-package core
+package server.core
 
-import common.Config
-import common.DBRecord
-import enums.OperationType
-import segments.IndexManager
-import segments.Searcher
-import writerReader.TableWriter
-import writerReader.WAL
+import server.Config
+import server.enums.OperationType
+import server.segments.IndexManager
+import server.segments.Searcher
+import server.writerReader.TableWriter
+import server.writerReader.WAL
 import java.io.Closeable
 import java.util.LinkedList
 import java.util.concurrent.Executors
@@ -66,7 +65,9 @@ class Database : Closeable {
     }
 
     override fun close() {
-        writeToDisc(table)
+        if (table.size > 0) {
+            writeToDisc(table)
+        }
         wal.close()
     }
 

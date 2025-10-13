@@ -1,8 +1,8 @@
-package writerReader
+package server.writerReader
 
-import common.DBRecord
-import enums.DataType
-import enums.OperationType
+import server.core.DBRecord
+import server.enums.DataType
+import server.enums.OperationType
 import java.io.Closeable
 import java.io.RandomAccessFile
 import java.nio.file.Files

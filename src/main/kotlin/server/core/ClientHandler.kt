@@ -1,4 +1,4 @@
-package core
+package server.core
 
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
@@ -75,7 +75,7 @@ class ClientHandler(private val database: Database, private val client: Socket) 
         } catch (e: Exception) {
             e.printStackTrace()
         }finally {
-                println("Client $clientName left...")
+                println("client.Client $clientName left...")
             }
         }
 }

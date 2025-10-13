@@ -1,4 +1,4 @@
-package bloom
+package server.bloom
 
 import java.lang.Integer.max
 import kotlin.math.ceil

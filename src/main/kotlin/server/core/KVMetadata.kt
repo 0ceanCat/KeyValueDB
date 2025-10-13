@@ -1,7 +1,8 @@
-package common
+package server.core
 
-import enums.DataType
-import enums.OperationType
+import server.enums.DataType
+import server.enums.OperationType
+
 
 class KVMetadata(meta: Int) {
     val op: OperationType
