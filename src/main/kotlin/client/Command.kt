@@ -1,7 +1,5 @@
 package client
 
-import resp.Frame
-
 sealed class Command {
     class Set(val key: String, val value: ByteArray) {
         fun toFrame(): Frame {
