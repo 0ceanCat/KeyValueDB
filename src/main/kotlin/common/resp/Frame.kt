@@ -1,57 +1,48 @@
-package resp
+package common.resp
 
+import common.exception.ProtocolParseException
+import common.writeInt
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
-val CRLF = "\r\n".toByteArray()
-val BULK_SIMBLE = '$'.toByte()
-val ARRAY_SIMBLE = '*'.toByte()
-val STRING_SIMBLE = '+'.toByte()
-val ERROR_SIMBLE = '-'.toByte()
-val INTEGER_SIMBLE = ':'.toByte()
-val BOOLEAN_SIMBLE = '#'.toByte()
-
 sealed class Frame {
-    open fun decode(): ByteArray {
+    open fun encode(): ByteArray {
         val buffer = ByteArrayOutputStream()
         when (this) {
             is FBulk -> {
-                buffer.write('$'.toInt())
-                buffer.write(data.size)
-                buffer.write(CRLF)
+                buffer.write(BULK_SYMBOL.toInt())
+                buffer.writeInt(data.size)
                 buffer.write(data)
                 buffer.write(CRLF)
             }
 
             is FArray -> {
-                buffer.write('*'.toInt())
-                buffer.write(data.size)
-                buffer.write(CRLF)
-                for (d in data) {
-                    buffer.write(d.decode())
+                buffer.write(ARRAY_SYMBOL.toInt())
+                buffer.writeInt(array.size)
+                for (d in array) {
+                    buffer.write(d.encode())
                 }
             }
 
             is FBoolean -> {
-                buffer.write('#'.toInt())
+                buffer.write(BULK_SYMBOL.toInt())
                 buffer.write(if (data) 1 else 0)
                 buffer.write(CRLF)
             }
 
             is FError -> {
-                buffer.write('-'.toInt())
+                buffer.write(ERROR_SYMBOL.toInt())
                 buffer.write(data.toByteArray())
                 buffer.write(CRLF)
             }
 
             is FInteger -> {
-                buffer.write(':'.toInt())
-                buffer.write(data)
-                buffer.write(CRLF)
+                buffer.write(INTEGER_SYMBOL.toInt())
+                buffer.writeInt(data)
             }
 
             is FString -> {
-                buffer.write('+'.toInt())
+                buffer.write(STRING_SYMBOL.toInt())
                 buffer.write(data.toByteArray())
                 buffer.write(CRLF)
             }
@@ -63,28 +54,28 @@ sealed class Frame {
         fun decodedFrom(input: InputStream): Frame {
             val first = input.read()
             when (first.toByte()) {
-                INTEGER_SIMBLE -> {
+                INTEGER_SYMBOL -> {
                     val line = input.readLineUtf8()
                     return line.toIntOrNull()
                         ?.let { FInteger(it) }
-                        ?: FError("Invalid integer: '$line'")
+                        ?: throw ProtocolParseException("Invalid integer: '$line'")
                 }
 
-                STRING_SIMBLE -> {
+                STRING_SYMBOL -> {
                     val line = input.readLineUtf8()
                     return FString(line)
                 }
 
-                BULK_SIMBLE -> {
+                BULK_SYMBOL -> {
                     val line = input.readLineUtf8()
                     val size = line.toIntOrNull()
-                        ?: return FError("Invalid integer: '$line'")
+                        ?: throw ProtocolParseException("Invalid integer: '$line'")
 
                     val data = ByteArray(size)
                     var read = 0
                     while (read < size) {
                         val r = input.read(data, read, size - read)
-                        if (r == -1) return FError("Connection closed")
+                        if (r == -1) throw ProtocolParseException("common.Connection closed")
                         read += r
                     }
                     // read CRLF
@@ -93,11 +84,11 @@ sealed class Frame {
                     return FBulk(data)
                 }
 
-                ARRAY_SIMBLE -> {
+                ARRAY_SYMBOL -> {
                     val line = input.readLineUtf8()
-                    val size = line.toIntOrNull() ?: error("Invalid input: $first$line")
+                    val size = line.toIntOrNull() ?: return FError("Invalid array size: '$line'")
                     if (size == -1) {
-                        return FArray(emptyList())
+                        return FArray(mutableListOf())
                     }
                     val items = mutableListOf<Frame>()
                     for (i in 0 until size) {
@@ -106,38 +97,44 @@ sealed class Frame {
                     return FArray(items)
                 }
 
-                BOOLEAN_SIMBLE -> {
+                BOOLEAN_SYMBOL -> {
                     val line = input.readLineUtf8()
                     return FBoolean(
                         when (line) {
                             "1" -> true
                             "0" -> false
-                            else -> error("Invalid input: $first$line")
+                            else -> throw ProtocolParseException("Invalid boolean: '$line'")
                         }
                     )
                 }
-
-                else -> error("Invalid input: $first")
+                else -> throw ProtocolParseException("Invalid symbol: '$first'")
             }
         }
 
-        data class FBulk(val data: ByteArray) : Frame()
-        data class FString(val data: String) : Frame()
-        data class FError(val data: String) : Frame()
-        data class FInteger(val data: Int) : Frame()
-        data class FArray(val data: List<Frame>) : Frame()
-        data class FBoolean(val data: Boolean) : Frame()
+        fun array(): FArray {
+            return FArray(mutableListOf())
+        }
     }
 
+    data class FBulk(val data: ByteArray) : Frame()
+    data class FString(val data: String) : Frame()
+    data class FError(val data: String) : Frame()
+    data class FInteger(val data: Int) : Frame()
+    data class FArray(val array: MutableList<Frame>) : Frame() {
+        fun add(data: ByteArray) {
+            array.add(FBulk(data))
+        }
+    }
+    data class FBoolean(val data: Boolean) : Frame()
 }
 
-fun InputStream.readLineUtf8(): String {
+private fun InputStream.readLineUtf8(): String {
     val buffer = ByteArrayOutputStream()
     var prev = -1
     while (true) {
         val b = this.read()
         if (b == -1) throw IllegalStateException("Connection closed")
-        if (prev == '\r'.toInt() && b == '\n'.toInt()) {
+        if (prev == '\r'.code && b == '\n'.code) {
             val arr = buffer.toByteArray()
             return arr.copyOf(arr.size - 1).toString(Charsets.UTF_8)
         }

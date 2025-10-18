@@ -1,5 +1,7 @@
 package server
 
+import common.Connection
+import common.Utils
 import server.core.DBRecord
 import server.core.ClientHandler
 import server.core.Database
@@ -16,7 +18,7 @@ class Server(private val port: Int = 8000) {
     private fun reloadFromWAL(): List<DBRecord> {
         val operations = mutableListOf<DBRecord>()
         for (f in Utils.readFilesFrom(GeneralWriter.prefix) { it.startsWith(WAL.logFile) }) {
-            println("realoding wal from ${f.name}...")
+            println("reloading wal from ${f.name}...")
             val reader = IndexReader(f)
             var dbOperation = reader.getNextRecord()
             while (dbOperation != null) {
@@ -49,7 +51,8 @@ class Server(private val port: Int = 8000) {
         try {
             while (true) {
                 val client = server.accept()
-                Thread.startVirtualThread(ClientHandler(database, client))
+                println("Accepted a client")
+                Thread.startVirtualThread(ClientHandler(database, Connection(client)))
             }
         } finally {
             println("shutdown...")

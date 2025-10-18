@@ -37,15 +37,14 @@ class MemoryTable : Iterable<Entry<String, DBRecord>> {
     private fun updateSize(key: String, v: Any): Int {
         val initial = size
         if (key in table) {
-            size -= if (table[key]?.first?.v is Int) vIntSize(v as Int) else stringSize(table[key]?.first?.v as String)
+            size -= if (table[key]?.first?.v is Int) vIntSize(v as Int) else stringSize(table[key]?.first?.v as ByteArray)
         } else {
-            size += stringSize(key)
+            size += stringSize(key.toByteArray(Charsets.UTF_8))
         }
         size += if (v is Int) {
             vIntSize(v)
         } else {
-            v as String
-            stringSize(v)
+            stringSize(v as ByteArray)
         }
         return size - initial
     }
@@ -76,8 +75,8 @@ class MemoryTable : Iterable<Entry<String, DBRecord>> {
         nOfblocks = blockCounter
     }
 
-    private fun stringSize(v: String): Int {
-        return v.toByteArray().size + vIntSize(v.length)
+    private fun stringSize(v: ByteArray): Int {
+        return v.size + vIntSize(v.size)
     }
 
     override fun iterator(): Iterator<Entry<String, DBRecord>> {

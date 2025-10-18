@@ -36,7 +36,7 @@ abstract class GeneralWriter : Closeable {
         val vType = if (op.v is Int) DataType.INT else DataType.STRING
         if (vType == DataType.STRING) {
             // the value is a string
-            write(op.op, vType, op.k, (op.v as String), sharePrefix)
+            write(op.op, vType, op.k, op.v as ByteArray, sharePrefix)
         } else {
             // the value is an int
             write(op.op, vType, op.k, op.v as Int, sharePrefix)
@@ -107,7 +107,7 @@ abstract class GeneralWriter : Closeable {
         op: OperationType,
         vType: DataType,
         k: String,
-        v: String,
+        v: ByteArray,
         sharePrefix: Boolean = true
     ) {
         writeKvMeta(op, vType)
@@ -115,7 +115,7 @@ abstract class GeneralWriter : Closeable {
             writeKeySharingPrefix(k)
         else
             writeWithoutSharingPrefix(k)
-        writeString(v.toByteArray())
+        writeString(v)
     }
 
     protected fun write(

@@ -8,7 +8,7 @@ enum class DataType(val id: Byte) {
 
     companion object {
         fun of(id: Int): DataType {
-            return DataType.values().firstOrNull() {
+            return DataType.entries.firstOrNull() {
                 it.id == id.toByte()
             } ?: throw InvalidParameterException()
         }

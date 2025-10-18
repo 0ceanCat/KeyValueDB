@@ -1,22 +1,15 @@
 package client
 
-import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
+import common.Command
+import common.Connection
+import common.resp.Frame
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.net.Socket
-import java.util.UUID
 import java.util.concurrent.CountDownLatch
 
 class Client(host: String = "localhost", port: Int = 8000) {
-    private val id: String = UUID.randomUUID().toString()
-    private val socket: Socket = Socket(host, port)
-    private val input: BufferedInputStream = BufferedInputStream(socket.getInputStream())
-    private val output: BufferedOutputStream = BufferedOutputStream(socket.getOutputStream())
-
-    init {
-        output.write(id.toByteArray(Charsets.UTF_8))
-    }
+    private val connection = Connection(Socket(host, port))
 
     fun set(key: String, value: Int) {
         set(key, byteArrayOf(value.toByte()))
@@ -26,9 +19,11 @@ class Client(host: String = "localhost", port: Int = 8000) {
         set(key, value.toByteArray(Charsets.UTF_8))
     }
 
-    private fun set(key: String, value: ByteArray) {
-        output.write("$key $value")
-        println(input.readObject())
+    fun set(key: String, value: ByteArray) {
+        val response = connection.writeCommand(Command.Set(key, value))
+        if (response !is Frame.FString || response.data != "OK") {
+            throw RuntimeException("unexpected frame $response")
+        }
     }
 }
 

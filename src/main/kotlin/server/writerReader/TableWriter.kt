@@ -4,7 +4,7 @@ import server.bloom.Bloom
 import server.Config
 import server.Config.Companion.BLOOM_FILTER_SIZE
 import server.core.DBRecord
-import Utils
+import common.Utils
 import server.segments.SegmentMetadata
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger

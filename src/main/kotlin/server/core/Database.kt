@@ -1,5 +1,6 @@
 package server.core
 
+import common.Command
 import server.Config
 import server.enums.OperationType
 import server.segments.IndexManager
@@ -19,6 +20,20 @@ class Database : Closeable {
     private val threshold = Config.MEMORY_TABLE_THRESHOLD
     private val lock = Any()
 
+    fun executeCmd(cmd: Command) {
+        when(cmd){
+            is Command.Del -> {
+                delete(cmd.key)
+            }
+            is Command.Get -> {
+                get(cmd.key)
+            }
+            is Command.Set -> {
+                insert(cmd.key, cmd.value)
+            }
+            is Command.Unknown -> {}
+        }
+    }
 
     fun insert(key: String, v: Any) {
         updateTable(OperationType.INSERT, key, v)
@@ -39,8 +54,8 @@ class Database : Closeable {
     }
 
     private fun updateTable(op: OperationType, key: String, v: Any) {
+        val dbOperation = DBRecord(op, key, v)
         synchronized(lock){
-            val dbOperation = DBRecord(op, key, v)
             writeWAL(dbOperation)
             table.put(key, dbOperation)
             checkThreshold()

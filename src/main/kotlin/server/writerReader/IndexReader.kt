@@ -162,11 +162,11 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
         return v
     }
 
-    private fun readString(): String {
+    private fun readString(): ByteArray {
         val vLen = readVInt()
         val vBytes = ByteArray(vLen)
         reader.read(vBytes)
-        return String(vBytes)
+        return vBytes
     }
 
     private fun readKey(): String {
