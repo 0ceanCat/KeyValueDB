@@ -7,6 +7,7 @@ import server.core.ClientHandler
 import server.core.Database
 import server.enums.OperationType
 import server.storage.Merger
+import server.storage.Searcher
 import server.writerReader.GeneralWriter
 import server.writerReader.IndexReader
 import server.writerReader.WAL
@@ -15,32 +16,24 @@ import java.net.ServerSocket
 class Server(private val port: Int = 8000) {
     private val database = Database()
 
-    private fun reloadFromWAL(): List<DBRecord> {
-        val operations = mutableListOf<DBRecord>()
+    private fun reloadFromWAL() {
         for (f in Utils.readFilesFrom(GeneralWriter.prefix) { it.startsWith(WAL.logFile) }) {
             println("reloading wal from ${f.name}...")
             val reader = IndexReader(f)
             var dbOperation = reader.getNextRecord()
             while (dbOperation != null) {
-                operations += dbOperation
+                database.reloadRecordFromWAL(dbOperation)
                 dbOperation = reader.getNextRecord()
             }
-            reader.closeAndRemove()
+            reader.close()
         }
-        return operations
     }
 
     fun runServer(){
         // init database
 
         // check the WAL file and reload the records to memory
-        val reloadedOperations = reloadFromWAL()
-        for (op in reloadedOperations) {
-            if (op.op == OperationType.INSERT)
-                database.insert(op.key, op.value)
-            else
-                database.delete(op.key)
-        }
+        reloadFromWAL()
 
         // start the Merger thread
         Merger.start()

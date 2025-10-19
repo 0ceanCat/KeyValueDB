@@ -14,7 +14,7 @@ object Merger : Thread() {
     }
 
     override fun run() {
-        while (true) {
+        /*while (true) {
             // get segments to be merged
             val overlaps = IndexManager.getOverlaps()
 
@@ -32,7 +32,7 @@ object Merger : Thread() {
                     lock.unlock()
                 }
             }
-        }
+        }*/
     }
 
     // wake up the thread

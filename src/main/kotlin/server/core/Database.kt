@@ -51,6 +51,10 @@ class Database : Closeable {
         updateTable(OperationType.DELETE, key, 0)
     }
 
+    fun reloadRecordFromWAL(dbRecord: DBRecord) {
+        table.put(dbRecord.key, dbRecord)
+    }
+
     private fun updateTable(op: OperationType, key: String, v: Any) {
         val dbOperation = DBRecord(op, key, v)
         synchronized(lock){

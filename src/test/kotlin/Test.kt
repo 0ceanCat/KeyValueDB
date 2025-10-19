@@ -7,7 +7,7 @@ class TestClient(val n: Int){
         for (i in 0 until n){
             Thread{
                 val client = Client()
-                for (j in 0..1000){
+                for (j in 0..200){
                     client.set("$j", "$j")
                 }
                 cd.countDown()

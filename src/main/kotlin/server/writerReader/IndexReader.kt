@@ -19,7 +19,6 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
     private var lastString = byteArrayOf()
 
     fun readMetadata(): SegmentMetadata {
-        val currentPosition = reader.filePointer
         val level = readLevel()
         val fileId = readVInt()
 
@@ -33,7 +32,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
         val firstKey = readString()
         val lastKey = readString()
 
-        val blocksIndex = readBlocksIndex(blocksIndexOffset, filterOffset)
+        val blocksIndex = readBlocksIndex(blocksIndexOffset, filterOffset, keyRangeOffset - 1)
 
         // read filter
         val bloom = readFilter()
@@ -48,7 +47,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
         )
     }
 
-    private fun readBlocksIndex(start: Long, end: Long): TreeMap<String, OffsetRange> {
+    private fun readBlocksIndex(start: Long, end: Long, lastBlockEndOffset: Long): TreeMap<String, OffsetRange> {
         seek(start)
         val blocksIndex = TreeMap<String, OffsetRange>()
         val blocksOffsetList = mutableListOf<Pair<String, Long>>()
@@ -56,13 +55,13 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
             val key = readString()
             blocksOffsetList += key to readVLong()
         }
-        for (i in (blocksOffsetList.indices - 1)) {
+        for (i in 0 until blocksOffsetList.size - 1) {
             val (key, offset) = blocksOffsetList[i]
             val (_, startOffset) = blocksOffsetList[i + 1]
             blocksIndex.put(key, OffsetRange(offset, startOffset - 1))
         }
         val last = blocksOffsetList.last()
-        blocksIndex.put(last.first, OffsetRange(last.second, end - 1))
+        blocksIndex.put(last.first, OffsetRange(last.second, lastBlockEndOffset - 1))
         return blocksIndex
     }
 

@@ -59,6 +59,7 @@ class TableWriter(val level: Int) : GeneralWriter() {
 
     fun writeTable(table: MemoryTable): String {
         println("write data to $currentPath...")
+        filter = Bloom(BLOOM_FILTER_SIZE, seed = currentID.toLong())
         for (entry in table) {
             write(entry.value)
         }
@@ -101,6 +102,7 @@ class TableWriter(val level: Int) : GeneralWriter() {
         wt.seek(0)
         wt.write(level)
         writeVint(currentID)
+        pointer = wt.filePointer
     }
 
     fun writeBlockMetadataAndFooter() {

@@ -11,9 +11,10 @@ class Block(private val blockCache: TreeMap<String, DBRecord>, private val start
             val blockCache = TreeMap<String, DBRecord>()
             synchronized(reader) {
                 reader.seek(startOffset)
-                getNextRecord(reader, endOffset)?.let {
-                        dbRecord ->
+                var dbRecord = getNextRecord(reader, endOffset)
+                while (dbRecord != null) {
                     blockCache[dbRecord.key] = dbRecord
+                    dbRecord = getNextRecord(reader, endOffset)
                 }
                 return Block(blockCache, startOffset, endOffset)
             }
