@@ -33,17 +33,15 @@ abstract class GeneralWriter : Closeable {
     // write a record to disk
     open fun write(op: DBRecord, sharePrefix: Boolean = true) {
         lastOffset = writer?.filePointer!!
-        val vType = if (op.v is Int) DataType.INT else DataType.STRING
+        val vType = if (op.value is Int) DataType.INT else DataType.STRING
         if (vType == DataType.STRING) {
             // the value is a string
-            write(op.op, vType, op.k, op.v as ByteArray, sharePrefix)
+            write(op.op, vType, op.key, op.value as ByteArray, sharePrefix)
         } else {
             // the value is an int
-            write(op.op, vType, op.k, op.v as Int, sharePrefix)
+            write(op.op, vType, op.key, op.value as Int, sharePrefix)
         }
     }
-
-    abstract fun reset()
 
     protected fun writeVint(_v: Int) {
         writeVLong(_v.toLong())
@@ -82,7 +80,7 @@ abstract class GeneralWriter : Closeable {
         writeString(bytes)
     }
 
-    private fun writeString(bytes: ByteArray) {
+    protected fun writeString(bytes: ByteArray) {
         val len = bytes.size
         writeVint(len)
         writeBytes(bytes)

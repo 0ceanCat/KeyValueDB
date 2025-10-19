@@ -5,7 +5,8 @@ import server.Config
 import server.Config.Companion.BLOOM_FILTER_SIZE
 import server.core.DBRecord
 import common.Utils
-import server.segments.SegmentMetadata
+import server.core.MemoryTable
+import server.storage.SegmentMetadata
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -27,9 +28,7 @@ class TableWriter : GeneralWriter() {
 
     private var pointer = 0L
 
-    private var lastKeyValueOffset = 0L
-
-    private val blocksOffset = mutableListOf<Int>()
+    private val blocksOffset = mutableListOf<Pair<String, Long>>()
 
     private var sharePrefix = false
 
@@ -42,90 +41,88 @@ class TableWriter : GeneralWriter() {
 
     private var currentID = id.get()
 
-    // reserve space for header
-    fun reserveSpaceForHeader() {
-        filter = Bloom(BLOOM_FILTER_SIZE, seed = currentID.toLong())
-        val wt = writer!!
-        for (i in 1..SegmentMetadata.nOfbytesForMetadata) {
-            wt.write(0)
-        }
-        pointer = wt.filePointer
-    }
+    private var firstKeyOfCurrentBlock: String? = null
 
-    // write a record to disk
-    fun write(op: DBRecord) {
-        val wt = writer!!
-        lastKeyValueOffset = wt.filePointer
-        filter?.add(op.k) // insert it to the bloom filter
-        super.write(op, sharePrefix)
-        // start sharing prefix
-        sharePrefix = true
+    private var firstKeyOfSegment: String? = null
 
-        // the current block is full, need to create a new block
-        if (wt.filePointer - pointer >= Config.BLOCK_SIZE) {
-            // store the start offset of the last block
-            blocksOffset += pointer.toInt()
-            // update the pointer
-            pointer = wt.filePointer
-            // stop sharing prefix with the previous block
-            sharePrefix = false
-        }
-    }
+    private var lastKeyOfSegment: String? = null
 
-    override fun reset() {
-        writer?.close()
-        startWrite()
-    }
-
-    private fun startWrite() {
+    init {
         currentName = "${basicPath}_${id.incrementAndGet()}"
         currentPath = "$prefix/$currentName"
-        currentID = id.get()
         pointer = 0
         filter = null
         blocksOffset.clear()
         writer = RandomAccessFile(currentPath, "rws")
     }
 
-    // write segment's metadata to disc
-    fun fillMetadata(level: Int = 0) {
-        val wt = writer!!
-        val footerStartOffset = wt.filePointer
-
-        // write footer
-        writeFooter()
-
-        // write header
-        writeHeader(wt, level, footerStartOffset)
+    fun writeTable(table: MemoryTable): String {
+        println("write data to ${currentPath}...")
+        writeHeader()
+        for (entry in table) {
+            write(entry.value)
+        }
+        writeBlockMetadataAndFooter()
+        println("${currentPath} done")
+        return currentPath
     }
 
-    private fun writeHeader(wt: RandomAccessFile, level: Int, footerStartOffset: Long){
-        wt.seek(0)
-        wt.write(level)
-        writeInt(footerStartOffset.toInt())
-    }
-
-    private fun writeInt(n: Int) {
+    // write a record to disk
+    private fun write(op: DBRecord) {
         val wt = writer!!
-        var v = n
-        for (i in 1..4) {
-            wt.write(v and 0xff)
-            v = v shr 8
+        filter?.add(op.key) // insert it to the bloom filter
+        super.write(op, sharePrefix)
+        // start sharing prefix
+        sharePrefix = true
+
+        if (firstKeyOfCurrentBlock == null) {
+            firstKeyOfCurrentBlock = op.key
+        }
+
+        if (firstKeyOfSegment == null) {
+            firstKeyOfSegment = op.key
+        }
+
+        lastKeyOfSegment = op.key
+
+        // the current block is full, need to create a new block
+        if (wt.filePointer - pointer >= Config.BLOCK_SIZE) {
+            // store the start offset of the last block
+            blocksOffset += Pair(firstKeyOfCurrentBlock!!, pointer)
+            // update the pointer
+            pointer = wt.filePointer
+            // stop sharing prefix with the previous block
+            sharePrefix = false
+            firstKeyOfCurrentBlock = null
         }
     }
 
-
-    private fun writeFooter() {
-        writeBlocksOffset()
-        writeFilter()
+    private fun writeHeader(level: Int = 0){
+        val wt = writer!!
+        wt.seek(0)
+        wt.write(level)
+        writeVint(currentID)
     }
 
-    private fun writeBlocksOffset() {
-        writeVint(blocksOffset.size) // write the number of blocks
+    private fun writeBlockMetadataAndFooter() {
+        val keyRangeOffset = writer!!.filePointer
+        writeString(firstKeyOfSegment!!.toByteArray(Charsets.UTF_8))
+        writeString(lastKeyOfSegment!!.toByteArray(Charsets.UTF_8))
+        val blockIndexOffset = writer!!.filePointer
+        writeBlocksIndex()
+        val filterOffset = writer!!.filePointer
+        writeFilter()
+        writeLong(keyRangeOffset)
+        writeLong(blockIndexOffset)
+        writeLong(filterOffset)
+    }
 
+    private fun writeBlocksIndex() {
         // write the blocks offset
-        for (checkpoint in blocksOffset) {
-            writeVint(checkpoint)
+        for ((key, blockOffset) in blocksOffset) {
+            val byteArray = key.toByteArray(Charsets.UTF_8)
+            writeString(byteArray)
+            writeVLong(blockOffset)
         }
     }
 
@@ -136,6 +133,15 @@ class TableWriter : GeneralWriter() {
         writeVint(f.bitmap.size)
         for (l in f.bitmap) {
             writeVLong(l)
+        }
+    }
+
+    private fun writeLong(n: Long) {
+        val wt = writer!!
+        var v = n
+        for (i in 1..Long.SIZE_BYTES) {
+            wt.write((v and 0xff).toInt())
+            v = v shr Byte.SIZE_BYTES
         }
     }
 }

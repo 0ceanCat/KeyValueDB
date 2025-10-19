@@ -3,19 +3,17 @@ package server.core
 import common.Command
 import server.Config
 import server.enums.OperationType
-import server.segments.IndexManager
-import server.segments.Searcher
+import server.storage.IndexManager
+import server.storage.Searcher
 import server.writerReader.TableWriter
 import server.writerReader.WAL
 import java.io.Closeable
-import java.util.LinkedList
-import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
 
 class Database : Closeable {
     private var table = MemoryTable()
-    private val immutableTables = LinkedList<MemoryTable>()
+    private val immutableTables = LinkedBlockingQueue<MemoryTable>()
     private var wal: WAL = WAL()
-    private val discWriter = Executors.newFixedThreadPool(1)
     private val searcher = Searcher()
     private val threshold = Config.MEMORY_TABLE_THRESHOLD
     private val lock = Any()
@@ -42,7 +40,7 @@ class Database : Closeable {
     fun get(key: String): Any? {
         val dbOperation = table.get(key)
         if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
-        if (dbOperation != null && dbOperation.op == OperationType.INSERT) return dbOperation.v
+        if (dbOperation != null && dbOperation.op == OperationType.INSERT) return dbOperation.value
 
         val v = searchFromImmutableTablesMemTables(key)
 
@@ -58,24 +56,28 @@ class Database : Closeable {
         synchronized(lock){
             writeWAL(dbOperation)
             table.put(key, dbOperation)
-            checkThreshold()
+            if (checkThreshold()) {
+                writeTableToDisc()
+            }
         }
     }
 
-    private fun checkThreshold() {
-        if (table.size >= threshold) {
-            val toBeWritten = table
-            table = MemoryTable()
-            immutableTables.addLast(toBeWritten)
-            val lastWal = wal
-            wal = WAL()
-            discWriter.execute {
-                val path = writeToDisc(toBeWritten)
-                IndexManager.loadNewSegmentAndNotifyMerger(path)
-                lastWal.close()
-                immutableTables.pollFirst()
-            }
+    private fun checkThreshold(): Boolean {
+        return table.size >= threshold
+    }
 
+    private fun writeTableToDisc() {
+        val toBeWritten = table
+        table = MemoryTable()
+        immutableTables.add(toBeWritten)
+        val lastWal = wal
+        wal = WAL()
+        Thread.startVirtualThread {
+            val path = writeToDisc(toBeWritten)
+            IndexManager.loadNewSegmentAndNotifyMerger(path)
+            lastWal.close()
+            lastWal.delete()
+            immutableTables.poll()
         }
     }
 
@@ -86,34 +88,22 @@ class Database : Closeable {
         wal.close()
     }
 
-    private fun reset() {
-        wal.reset()
-    }
-
     private fun writeWAL(op: DBRecord) {
         wal.write(op)
     }
 
     private fun writeToDisc(table: MemoryTable): String {
-        val tableWriter = TableWriter()
-        tableWriter.reset()
-        val currentPath = tableWriter.currentPath
-        println("write data to ${tableWriter.currentPath}...")
-        tableWriter.reserveSpaceForHeader()
-        for (entry in table) {
-            tableWriter.write(entry.value)
+        TableWriter().use {
+            tableWriter ->
+            return tableWriter.writeTable(table)
         }
-        tableWriter.fillMetadata()
-        tableWriter.close()
-        println("${tableWriter.currentPath} done")
-        return currentPath
     }
 
     private fun searchFromImmutableTablesMemTables(key: String): Any? {
         for (t in immutableTables) {
             val dbOperation = t.get(key)
             if (dbOperation != null && dbOperation.op == OperationType.DELETE) return null
-            if (dbOperation != null) return dbOperation.v
+            if (dbOperation != null) return dbOperation.value
         }
         return null
     }

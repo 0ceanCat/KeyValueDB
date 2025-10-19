@@ -20,12 +20,11 @@ class WAL : GeneralWriter() {
         super.write(op, sharePrefix)
     }
 
-    override fun reset() {
-        if (writer != null) close()
-    }
-
     override fun close() {
         super.close()
+    }
+
+    fun delete() {
         File(currentPath).delete()
     }
     private fun loadId(): Int{

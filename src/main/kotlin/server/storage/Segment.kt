@@ -1,4 +1,4 @@
-package server.segments
+package server.storage
 
 import server.writerReader.IndexReader
 import java.io.File

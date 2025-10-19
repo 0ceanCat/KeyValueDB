@@ -1,6 +1,6 @@
 package server.core
 
-import server.segments.SegmentMetadata
+import server.storage.SegmentMetadata
 import java.util.TreeMap
 import kotlin.collections.Map.Entry
 
@@ -25,19 +25,27 @@ class MemoryTable : Iterable<Entry<String, DBRecord>> {
         val sizePerBlock = 16 //1024 * 16 // 16kb
     }
 
+    fun getLowestKey(): String {
+        return table.firstKey()
+    }
+
+    fun getHighestKey(): String {
+        return table.lastKey()
+    }
+
     fun get(key: String): DBRecord? {
         return table[key]?.first
     }
 
     fun put(key: String, value: DBRecord) {
-        val kvSize = updateSize(key, value.v)
+        val kvSize = updateSize(key, value.value)
         table[key] = value to kvSize
     }
 
     private fun updateSize(key: String, v: Any): Int {
         val initial = size
         if (key in table) {
-            size -= if (table[key]?.first?.v is Int) vIntSize(v as Int) else stringSize(table[key]?.first?.v as ByteArray)
+            size -= if (table[key]?.first?.value is Int) vIntSize(v as Int) else stringSize(table[key]?.first?.value as ByteArray)
         } else {
             size += stringSize(key.toByteArray(Charsets.UTF_8))
         }

@@ -4,37 +4,63 @@ import server.bloom.Bloom
 import server.core.DBRecord
 import server.core.KVMetadata
 import server.enums.DataType
-import server.segments.SegmentMetadata
+import server.storage.BlockHolder
+import server.storage.SegmentMetadata
 import java.io.File
 import java.io.RandomAccessFile
+import java.util.TreeMap
 
 open class IndexReader(private val f: File) : Iterable<DBRecord?> {
-    private val reader: RandomAccessFile
-    private val fileId: Int
+    private val reader: RandomAccessFile = RandomAccessFile(f.path, "r")
     var metadata: SegmentMetadata? = null
         get() = field
         private set
 
     private var lastString = byteArrayOf()
 
-    init {
-        reader = RandomAccessFile(f.path, "r")
-        fileId = f.name.split("_")[1].toInt()
-    }
-
     fun readMetadata(): SegmentMetadata {
+        val currentPosition = reader.filePointer
         val level = readLevel()
-        val footerStartOffset = readInt()
-        val currentOffset = getFilePointer()
-        seek(footerStartOffset.toLong())
+        val fileId = readVInt()
 
-        // read offsets
-        val numberOfBlocks = readVInt()
-        val blocksOffset = mutableListOf<Int>()
-        for (i in 1..numberOfBlocks)
-            blocksOffset += readVInt()
+        // jump to the footer
+        seek(f.length() - 3 * Long.SIZE_BYTES)
+        val keyRangeOffset = readLong()
+        val blocksIndexOffset = readLong()
+        val filterOffset = readLong()
+
+        seek(keyRangeOffset)
+        val firstKey = readString()
+        val lastKey = readString()
+
+        val blocksIndex = readBlocksIndex(blocksIndexOffset, filterOffset)
 
         // read filter
+        val bloom = readFilter()
+
+        seek(currentPosition)
+
+        return SegmentMetadata(
+            level,
+            fileId,
+            blocksIndex,
+            keyRangeOffset,
+            bloom,
+            firstKey,
+            lastKey
+        )
+    }
+
+    private fun readBlocksIndex(start: Long, end: Long): TreeMap<String, BlockHolder> {
+        seek(start)
+        val blocksIndex = TreeMap<String, BlockHolder>()
+        while (reader.filePointer <= end) {
+            blocksIndex.put(readString(), BlockHolder(readVLong()))
+        }
+        return blocksIndex
+    }
+
+    private fun readFilter(): Bloom {
         val seed = readVInt()
         val k = readVInt()
         val bitMapSize = readVInt()
@@ -42,13 +68,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
         for (i in 0 until bitMapSize) {
             bitMap[i] = readVLong()
         }
-
-        // reset file pointer
-        seek(currentOffset)
-        return SegmentMetadata(
-            level, footerStartOffset, fileId,
-            blocksOffset, Bloom.restore(bitMap, seed.toLong(), k)
-        )
+        return Bloom.restore(bitMap, seed.toLong(), k)
     }
 
     override fun iterator(): Iterator<DBRecord?> {
@@ -74,7 +94,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
 
         override fun next(): DBRecord? {
             val r = current
-            current = if (reader.filePointer >= metadata.footerStartOffset) {
+            current = if (reader.filePointer >= metadata.blocksEndOffset) {
                 null
             } else {
                 val operation = getNextRecord()
@@ -93,7 +113,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
 
         if (meta == null) return null
 
-        val key = readKey()
+        val key = readString()
 
         val v: Any
 
@@ -101,7 +121,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
             v = readVInt()
             if (v == -1) return null
         } else {
-            v = readString()
+            v = readBytes()
         }
 
         return DBRecord(meta.op, key, v)
@@ -126,17 +146,25 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
 
     fun readKeyIgnoringKvMeta(): String {
         reader.seek(reader.filePointer + 1)
-        return readKey()
+        return readString()
     }
     private fun readLevel(): Int {
         return reader.read()
     }
 
     private fun readInt(): Int {
-        var v = reader.read()
-        v = reader.read() shl 8 or v
-        v = reader.read() shl 16 or v
-        v = reader.read() shl 24 or v
+        var v = 0
+        for (i in 0 until Int.SIZE_BYTES) {
+            v = (reader.read() shl (Byte.SIZE_BYTES * i)) or v
+        }
+        return v
+    }
+
+    private fun readLong(): Long {
+        var v = 0L
+        for (i in 0 until Long.SIZE_BYTES) {
+            v = (reader.read().toLong() shl (Byte.SIZE_BYTES * i)) or v
+        }
         return v
     }
 
@@ -162,22 +190,29 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
         return v
     }
 
-    private fun readString(): ByteArray {
+    private fun readBytes(): ByteArray {
         val vLen = readVInt()
         val vBytes = ByteArray(vLen)
         reader.read(vBytes)
         return vBytes
     }
 
-    private fun readKey(): String {
-        val prefix = readVInt()
+    private fun readPrefixSharedString(): String {
+        val prefixSize = readVInt()
         val kLen = readVInt()
         val kBytes = ByteArray(kLen)
         reader.read(kBytes)
-        val currentBytes = lastString.sliceArray(0 until prefix) + kBytes
+        val currentBytes = lastString.sliceArray(0 until prefixSize) + kBytes
         val key = String(currentBytes)
         lastString = currentBytes
         return key
+    }
+
+    private fun readString(): String {
+        val kLen = readVInt()
+        val kBytes = ByteArray(kLen)
+        reader.read(kBytes)
+        return String(kBytes, Charsets.UTF_8)
     }
 
     private fun readKVmeta(): KVMetadata? {

@@ -6,7 +6,7 @@ import server.core.DBRecord
 import server.core.ClientHandler
 import server.core.Database
 import server.enums.OperationType
-import server.segments.Merger
+import server.storage.Merger
 import server.writerReader.GeneralWriter
 import server.writerReader.IndexReader
 import server.writerReader.WAL
@@ -37,9 +37,9 @@ class Server(private val port: Int = 8000) {
         val reloadedOperations = reloadFromWAL()
         for (op in reloadedOperations) {
             if (op.op == OperationType.INSERT)
-                database.insert(op.k, op.v)
+                database.insert(op.key, op.value)
             else
-                database.delete(op.k)
+                database.delete(op.key)
         }
 
         // start the Merger thread

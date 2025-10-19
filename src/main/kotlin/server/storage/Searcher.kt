@@ -1,19 +1,18 @@
-package server.segments
+package server.storage
 
 import server.enums.OperationType
 
 class Searcher {
-    private val sstables: MutableList<Segment> = IndexManager.indexes
-    private val lock = Any()
-
     // search the given key in the segments
     fun searchFromSStable(key: String): Any? {
-        for (sstable in sstables) {
-            if (sstable.mayContain(key)){
-                val v = lookUpKey(sstable, key)
-                if (v != null) return v
+        for (level in IndexManager.segmentsByLevel.keys) {
+            val segments = IndexManager.segmentsByLevel[level]!!
+            for (segment in segments) {
+                if (segment.mayContain(key)){
+                    val v = lookUpKey(segment, key)
+                    if (v != null) return v
+                }
             }
-
         }
         return null
     }
@@ -30,10 +29,10 @@ class Searcher {
         var record = block.getNextRecord()
 
         while (record != null) {
-            if (record.k == key) {
+            if (record.key == key) {
                 // close the reader if found the key
                 block.readingFinish()
-                return if (record.op == OperationType.DELETE) null else record.v
+                return if (record.op == OperationType.DELETE) null else record.value
             }
             // read the next record
             record = block.getNextRecord()
