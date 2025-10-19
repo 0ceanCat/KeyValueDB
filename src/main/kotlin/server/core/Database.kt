@@ -93,7 +93,7 @@ class Database : Closeable {
     }
 
     private fun writeToDisc(table: MemoryTable): String {
-        TableWriter().use {
+        TableWriter(0).use {
             tableWriter ->
             return tableWriter.writeTable(table)
         }

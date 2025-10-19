@@ -1,6 +1,5 @@
 package server.core
 
-import server.storage.SegmentMetadata
 import java.util.TreeMap
 import kotlin.collections.Map.Entry
 
@@ -9,29 +8,6 @@ class MemoryTable : Iterable<Entry<String, DBRecord>> {
 
     var size = 0
         private set
-
-    var nOfblocks = -1
-        private set
-        get() {
-            if (field == -1) updateNofBlocks()
-            return field
-        }
-
-    private val points = mutableListOf<Int>()
-
-    private var lastPoint = 0
-
-    companion object {
-        val sizePerBlock = 16 //1024 * 16 // 16kb
-    }
-
-    fun getLowestKey(): String {
-        return table.firstKey()
-    }
-
-    fun getHighestKey(): String {
-        return table.lastKey()
-    }
 
     fun get(key: String): DBRecord? {
         return table[key]?.first
@@ -63,24 +39,6 @@ class MemoryTable : Iterable<Entry<String, DBRecord>> {
         else if (v >= 0x4000 && v <= 0x1fffff) return 3
         else if (v >= 0x200000 && v <= 0x0fffffff) return 4
         return 5
-    }
-
-    private fun updateNofBlocks() {
-        var orderedSize = 0
-        var blockCounter = 0
-        var recordCounter = 0
-        for (kv in table) {
-            orderedSize += kv.value.second
-            recordCounter += SegmentMetadata.bytesForKVmeta
-            if (orderedSize - lastPoint >= sizePerBlock) {
-                points += lastPoint
-                orderedSize += recordCounter
-                lastPoint = orderedSize
-                blockCounter++
-                recordCounter = 0
-            }
-        }
-        nOfblocks = blockCounter
     }
 
     private fun stringSize(v: ByteArray): Int {

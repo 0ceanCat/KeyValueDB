@@ -58,10 +58,8 @@ object Merger : Thread() {
         val level = readers[0].second.metadata.level + 1
 
         // create the table writer
-        TableWriter().use {
-            tableWriter ->
-            tableWriter.reserveSpaceForHeader()
-
+        val tableWriter = TableWriter(level)
+        tableWriter.use {
             while (!readers.isEmpty()) {
                 var minRecord = readers[0].second.current()
                 var minReader = readers[0]
@@ -100,15 +98,13 @@ object Merger : Thread() {
                 // write the smallest record to dick
                 minRecord?.let { tableWriter.write(it) }
             }
-            tableWriter.fillMetadata(level)
-            tableWriter.close()
-
-            // delete segments
-            IndexManager.remove(paths)
-
-            // wake up the Merger
-            IndexManager.loadNewSegmentAndNotifyMerger(tableWriter.currentPath)
-            println("merge finished...")
         }
+
+        // delete segments
+        IndexManager.remove(paths)
+
+        // wake up the Merger
+        IndexManager.loadNewSegmentAndNotifyMerger(tableWriter.currentPath)
+        println("merge finished...")
     }
 }

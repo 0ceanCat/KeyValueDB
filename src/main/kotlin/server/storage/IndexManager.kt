@@ -2,11 +2,10 @@ package server.storage
 
 import common.Utils
 import java.io.File
-import java.util.TreeSet
 
 object IndexManager {
     private val path = "index"
-    val segmentsByLevel = mutableMapOf<Int, TreeSet<Segment>>() // store segments by their level
+    val segmentsByLevel = mutableMapOf<Int, MutableList<Segment>>() // store segments by their level
     val segmentByName = mutableMapOf<String, Segment>() // segment name -> segment object
 
     init {
@@ -27,7 +26,7 @@ object IndexManager {
     private fun loadSegment(file: File): Segment {
         val segment = Segment(file)
         // add the segment into the TreeSet corresponding to its level
-        val set = segmentsByLevel.getOrPut(segment.metadata.level) { TreeSet() }
+        val set = segmentsByLevel.getOrPut(segment.metadata.level) { ArrayList() }
         set.add(segment)
 
         // add the segment into lists and map
@@ -43,7 +42,7 @@ object IndexManager {
 
     // find overlapped segment files for merging
     fun getOverlaps(): Map<Int, Set<Segment>> {
-        val overlaps = mutableMapOf<Int, MutableSet<Segment>>()
+        /*val overlaps = mutableMapOf<Int, MutableSet<Segment>>()
         for (level in segmentsByLevel.keys) {
             val set = overlaps.getOrPut(level) { mutableSetOf() }
             val segments = segmentsByLevel[level]!!
@@ -63,11 +62,12 @@ object IndexManager {
                 }
             }
         }
-        return overlaps
+        return overlaps*/
+        TODO()
     }
 
     fun getSegmentsForMerge(): Map<Int, Set<Segment>> {
-        var level = 0
+        /*var level = 0
         val overlaps = mutableMapOf<Int, MutableSet<Segment>>()
         while (segmentsByLevel.contains(level)) {
             val segments: TreeSet<Segment> = segmentsByLevel[level]!!
@@ -94,12 +94,14 @@ object IndexManager {
                 }
             }
         }
-        return overlaps
+        return overlaps*/
+        TODO()
     }
 
-    private fun findOverlappedSegments(segment: Segment, nextLevelSegments: ): List<Segment> {
-        var minKey: String = segment
-        var maxKey: String = null
+    private fun findOverlappedSegments(segment: Segment, nextLevelSegments: List<Segment>): List<Segment> {
+        /*var minKey: String = segment
+        var maxKey: String = null*/
+        TODO()
     }
 
 

@@ -21,23 +21,10 @@ class Searcher {
         // get possible block
         val block = sstable.getPossibleBlock(key)
 
-        //  first try to find it in cache
-        val v = block.readFromCache(key)
-        if (v != null) return v
+        val record = block?.get(key)
 
-        // read a record
-        var record = block.getNextRecord()
-
-        while (record != null) {
-            if (record.key == key) {
-                // close the reader if found the key
-                block.readingFinish()
-                return if (record.op == OperationType.DELETE) null else record.value
-            }
-            // read the next record
-            record = block.getNextRecord()
-        }
-        return null
+        if (record == null) return null
+        return if (record.op == OperationType.DELETE) null else record.value
     }
 
 }

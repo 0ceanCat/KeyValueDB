@@ -10,7 +10,7 @@ import server.storage.SegmentMetadata
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
 
-class TableWriter : GeneralWriter() {
+class TableWriter(val level: Int) : GeneralWriter() {
     companion object {
         private val prefix = "index"
         private val id = AtomicInteger(0)
@@ -54,21 +54,20 @@ class TableWriter : GeneralWriter() {
         filter = null
         blocksOffset.clear()
         writer = RandomAccessFile(currentPath, "rws")
+        writeHeader()
     }
 
     fun writeTable(table: MemoryTable): String {
-        println("write data to ${currentPath}...")
-        writeHeader()
+        println("write data to $currentPath...")
         for (entry in table) {
             write(entry.value)
         }
-        writeBlockMetadataAndFooter()
-        println("${currentPath} done")
+        println("$currentPath done")
         return currentPath
     }
 
     // write a record to disk
-    private fun write(op: DBRecord) {
+    fun write(op: DBRecord) {
         val wt = writer!!
         filter?.add(op.key) // insert it to the bloom filter
         super.write(op, sharePrefix)
@@ -97,14 +96,14 @@ class TableWriter : GeneralWriter() {
         }
     }
 
-    private fun writeHeader(level: Int = 0){
+    fun writeHeader(){
         val wt = writer!!
         wt.seek(0)
         wt.write(level)
         writeVint(currentID)
     }
 
-    private fun writeBlockMetadataAndFooter() {
+    fun writeBlockMetadataAndFooter() {
         val keyRangeOffset = writer!!.filePointer
         writeString(firstKeyOfSegment!!.toByteArray(Charsets.UTF_8))
         writeString(lastKeyOfSegment!!.toByteArray(Charsets.UTF_8))
@@ -115,6 +114,11 @@ class TableWriter : GeneralWriter() {
         writeLong(keyRangeOffset)
         writeLong(blockIndexOffset)
         writeLong(filterOffset)
+    }
+
+    override fun close() {
+        writeBlockMetadataAndFooter()
+        super.close()
     }
 
     private fun writeBlocksIndex() {
