@@ -1,9 +1,11 @@
 package server.storage
 
+import common.Utils
 import server.writerReader.IndexReader
 import server.writerReader.TableWriter
 import java.io.File
 import java.util.concurrent.locks.ReentrantLock
+import kotlin.math.min
 
 object Merger : Thread() {
     private val lock = ReentrantLock()
@@ -14,9 +16,22 @@ object Merger : Thread() {
     }
 
     override fun run() {
-        /*while (true) {
+        while (true) {
             // get segments to be merged
-            val overlaps = IndexManager.getOverlaps()
+            var level = 0
+            while (level in IndexManager.segmentsByLevel) {
+                val segments = IndexManager.segmentsByLevel[level]
+                segments?.let {
+                    getOverlappedSegments(segments)
+                    IndexManager.segmentsByLevel[level + 1]?.let {
+                            segmentsOfNextLevel ->
+                        for (segment in segments) {
+                            findMergeCandidates(segment, segmentsOfNextLevel)
+                        }
+                    }
+                }
+                level += 1
+            }
 
             if (!overlaps.isEmpty()) {
                 // merge the segments
@@ -32,7 +47,7 @@ object Merger : Thread() {
                     lock.unlock()
                 }
             }
-        }*/
+        }
     }
 
     // wake up the thread
@@ -43,6 +58,40 @@ object Merger : Thread() {
         }finally {
             lock.unlock()
         }
+    }
+
+    private fun getOverlappedSegments(segments: List<Segment>): List<Segment> {
+        val copy = ArrayList(segments)
+        copy.sortBy { segments -> segments.metadata.lowestKey }
+        var lowestKey = copy.first().lowestKey()
+        var highestKey = copy.first().highestKey()
+
+        val overlapped = mutableListOf<Segment>()
+        for (segment in segments) {
+            if (!(segment.highestKey() < lowestKey || highestKey < segment.lowestKey())) {
+                overlapped += segment
+                lowestKey = Utils.min(lowestKey, segment.lowestKey())
+                highestKey = Utils.min(highestKey, segment.highestKey())
+            }
+        }
+        return overlapped
+    }
+
+    private fun findMergeCandidates(segment: Segment, segmentsOfNextLevel: List<Segment>?): List<Segment> {
+        if (segmentsOfNextLevel == null) {
+            return listOf()
+        }
+
+        val candidates = mutableListOf<Segment>()
+        for (segmentNextLevel in segmentsOfNextLevel) {
+            if (segment.overlaps(segmentNextLevel)) {
+                candidates += segmentsOfNextLevel
+            }
+        }
+        if (candidates.isNotEmpty()) {
+            candidates += segment
+        }
+        return candidates
     }
 
     private fun merge(paths: Set<Segment>) {

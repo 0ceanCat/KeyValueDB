@@ -1,16 +1,21 @@
 package server.core
 
 import common.Command
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 import server.Config
 import server.enums.OperationType
 import server.storage.IndexManager
 import server.storage.Searcher
+import server.writerReader.IndexReader
 import server.writerReader.TableWriter
 import server.writerReader.WAL
 import java.io.Closeable
+import java.io.File
 import java.util.concurrent.LinkedBlockingQueue
 
 class Database : Closeable {
+    private val logger: Logger = LogManager.getLogger(Database::class)
     private var table = MemoryTable()
     private val immutableTables = LinkedBlockingQueue<MemoryTable>()
     private var wal: WAL = WAL()
@@ -51,8 +56,16 @@ class Database : Closeable {
         updateTable(OperationType.DELETE, key, 0)
     }
 
-    fun reloadRecordFromWAL(dbRecord: DBRecord) {
-        table.put(dbRecord.key, dbRecord)
+    fun recoverFromWal(wal: File) {
+        IndexReader(wal).use {
+            reader ->
+            logger.info("reloading wal from ${wal.name}...")
+            var dbRecord = reader.getNextRecord()
+            while (dbRecord != null) {
+                table.put(dbRecord.key, dbRecord)
+                dbRecord = reader.getNextRecord()
+            }
+        }
     }
 
     private fun updateTable(op: OperationType, key: String, v: Any) {

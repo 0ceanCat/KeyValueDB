@@ -2,30 +2,22 @@ package server
 
 import common.Connection
 import common.Utils
-import server.core.DBRecord
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
 import server.core.ClientHandler
 import server.core.Database
-import server.enums.OperationType
 import server.storage.Merger
-import server.storage.Searcher
 import server.writerReader.GeneralWriter
-import server.writerReader.IndexReader
 import server.writerReader.WAL
 import java.net.ServerSocket
 
 class Server(private val port: Int = 8000) {
+    private val logger: Logger = LogManager.getLogger(Server::class)
     private val database = Database()
 
     private fun reloadFromWAL() {
         for (f in Utils.readFilesFrom(GeneralWriter.prefix) { it.startsWith(WAL.logFile) }) {
-            println("reloading wal from ${f.name}...")
-            val reader = IndexReader(f)
-            var dbOperation = reader.getNextRecord()
-            while (dbOperation != null) {
-                database.reloadRecordFromWAL(dbOperation)
-                dbOperation = reader.getNextRecord()
-            }
-            reader.close()
+            database.recoverFromWal(f)
         }
     }
 
@@ -39,16 +31,16 @@ class Server(private val port: Int = 8000) {
         Merger.start()
 
         val server = ServerSocket(port)
-        println("server.Server started...")
-        println("server.Server is listening on port ${port}")
+        logger.info("server.Server started...")
+        logger.info("server.Server is listening on port ${port}")
         try {
             while (true) {
                 val client = server.accept()
-                println("Accepted a client")
+                logger.info("Accepted a client")
                 Thread.startVirtualThread(ClientHandler(database, Connection(client)))
             }
         } finally {
-            println("shutdown...")
+            logger.info("shutdown...")
             database.close()
         }
     }

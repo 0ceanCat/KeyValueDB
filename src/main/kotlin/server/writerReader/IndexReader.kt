@@ -6,11 +6,12 @@ import server.core.KVMetadata
 import server.enums.DataType
 import server.storage.OffsetRange
 import server.storage.SegmentMetadata
+import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.TreeMap
 
-open class IndexReader(private val f: File) : Iterable<DBRecord?> {
+open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
     private val reader: RandomAccessFile = RandomAccessFile(f.path, "r")
     var metadata: SegmentMetadata? = null
         get() = field
@@ -140,7 +141,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?> {
         return reader.filePointer
     }
 
-    fun close() {
+    override fun close() {
         reader.close()
     }
 

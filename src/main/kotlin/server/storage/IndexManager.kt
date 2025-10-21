@@ -4,23 +4,20 @@ import common.Utils
 import java.io.File
 
 object IndexManager {
-    private val path = "index"
+    private const val path = "index"
     val segmentsByLevel = mutableMapOf<Int, MutableList<Segment>>() // store segments by their level
-    val segmentByName = mutableMapOf<String, Segment>() // segment name -> segment object
 
     init {
-        // load segment files
         scan()
     }
 
-    private fun scan(): List<Segment> {
-        val res = mutableListOf<Segment>()
+    private fun scan() {
         for (f in Utils.readFilesFrom(path) { it.startsWith("segment") }) { // find all files whose name starts by 'segment'
-            if (f.path !in segmentByName) {
-                res += loadSegment(f)
-            }
+             loadSegment(f)
         }
-        return res
+        for (segments in segmentsByLevel.values) {
+            segments.sortBy { segment -> segment.level }
+        }
     }
 
     private fun loadSegment(file: File): Segment {
@@ -28,9 +25,6 @@ object IndexManager {
         // add the segment into the TreeSet corresponding to its level
         val set = segmentsByLevel.getOrPut(segment.metadata.level) { ArrayList() }
         set.add(segment)
-
-        // add the segment into lists and map
-        segmentByName[file.path] = segment
         return segment
     }
 
@@ -104,12 +98,9 @@ object IndexManager {
         TODO()
     }
 
-
-
     fun remove(paths: Set<Segment>) {
         for (p in paths) {
             segmentsByLevel[p.level]?.remove(p)
-            segmentByName.remove(p.path)
         }
     }
 }

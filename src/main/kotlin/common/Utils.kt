@@ -19,5 +19,13 @@ class Utils {
 
             return res
         }
+
+        fun min(s: String, s2: String): String {
+            return if (s < s2) s else s2
+        }
+
+        fun max(s: String, s2: String): String {
+            return if (s > s2) s else s2
+        }
     }
 }

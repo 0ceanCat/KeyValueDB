@@ -33,12 +33,10 @@ class Segment(f: File) : Comparable<Segment> {
     val level = metadata.level
     val id = metadata.id
 
-    companion object {
-        // verify if 2 segments are overlapping
-        fun overlap(sg1: Segment?, sg2: Segment?): Boolean {
-            if (sg1 == null || sg1.isEmpty() || sg2 == null || sg2.isEmpty()) return false
-            return !(sg1.highestKey() < sg2.lowestKey() || sg2.highestKey() < sg1.lowestKey())
-        }
+    // verify if 2 segments are overlapping
+    fun overlaps(sg: Segment?): Boolean {
+        if (sg == null || sg.isEmpty()) return false
+        return !(this.highestKey() < sg.lowestKey() || sg.highestKey() < this.lowestKey())
     }
 
     // verify whether the current segment may contain the provided key
@@ -58,6 +56,8 @@ class Segment(f: File) : Comparable<Segment> {
                 sstable.put(key, block)
                 return block
             }
+        } else {
+            block = entry.value
         }
         return block
     }
@@ -81,11 +81,11 @@ class Segment(f: File) : Comparable<Segment> {
         return id
     }
 
-    private fun lowestKey(): String {
+    fun lowestKey(): String {
         return metadata.lowestKey
     }
 
-    private fun highestKey(): String {
+    fun highestKey(): String {
         return metadata.highestKey
     }
 
