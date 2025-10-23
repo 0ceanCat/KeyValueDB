@@ -34,71 +34,7 @@ object IndexManager {
         Merger.tryMerge() // wake up the Merger thread
     }
 
-    // find overlapped segment files for merging
-    fun getOverlaps(): Map<Int, Set<Segment>> {
-        /*val overlaps = mutableMapOf<Int, MutableSet<Segment>>()
-        for (level in segmentsByLevel.keys) {
-            val set = overlaps.getOrPut(level) { mutableSetOf() }
-            val segments = segmentsByLevel[level]!!
-            for (segment in segments) {
-                // look for neighbors
-                val lower: Segment? = segments.lower(segment)
-                val higher: Segment? = segments.higher(segment)
-
-                // check if they are overlapped
-                if (Segment.overlap(lower, segment)) {
-                    set.add(lower!!)
-                    set.add(segment)
-                }
-                if (Segment.overlap(higher, segment)) {
-                    set.add(higher!!)
-                    set.add(segment)
-                }
-            }
-        }
-        return overlaps*/
-        TODO()
-    }
-
-    fun getSegmentsForMerge(): Map<Int, Set<Segment>> {
-        /*var level = 0
-        val overlaps = mutableMapOf<Int, MutableSet<Segment>>()
-        while (segmentsByLevel.contains(level)) {
-            val segments: TreeSet<Segment> = segmentsByLevel[level]!!
-            for (segment in segments) {
-                findOverlappedSegments(segment, segmentsByLevel[level + 1])
-            }
-        }
-        for (level in segmentsByLevel.keys) {
-            val set = overlaps.getOrPut(level) { mutableSetOf() }
-            val segments = segmentsByLevel[level]!!
-            for (segment in segments) {
-                // look for neighbors
-                val lower: Segment? = segments.lower(segment)
-                val higher: Segment? = segments.higher(segment)
-
-                // check if they are overlapped
-                if (Segment.overlap(lower, segment)) {
-                    set.add(lower!!)
-                    set.add(segment)
-                }
-                if (Segment.overlap(higher, segment)) {
-                    set.add(higher!!)
-                    set.add(segment)
-                }
-            }
-        }
-        return overlaps*/
-        TODO()
-    }
-
-    private fun findOverlappedSegments(segment: Segment, nextLevelSegments: List<Segment>): List<Segment> {
-        /*var minKey: String = segment
-        var maxKey: String = null*/
-        TODO()
-    }
-
-    fun remove(paths: Set<Segment>) {
+    fun remove(paths: List<Segment>) {
         for (p in paths) {
             segmentsByLevel[p.level]?.remove(p)
         }

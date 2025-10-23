@@ -25,7 +25,7 @@ class Segment(f: File) : Comparable<Segment> {
 
     init {
         val reader = IndexReader(f)
-        metadata = reader.readMetadata()
+        metadata = reader.segMetadata
         sstable = TreeMap<String, Block>()
         reader.close()
     }
@@ -34,9 +34,8 @@ class Segment(f: File) : Comparable<Segment> {
     val id = metadata.id
 
     // verify if 2 segments are overlapping
-    fun overlaps(sg: Segment?): Boolean {
-        if (sg == null || sg.isEmpty()) return false
-        return !(this.highestKey() < sg.lowestKey() || sg.highestKey() < this.lowestKey())
+    fun overlaps(lowestKey: String, highestKey: String): Boolean {
+        return !(this.highestKey() < lowestKey || highestKey < this.lowestKey())
     }
 
     // verify whether the current segment may contain the provided key

@@ -1,18 +1,27 @@
 package server.storage
 
 import common.Utils
+import server.core.DBRecord
 import server.writerReader.IndexReader
 import server.writerReader.TableWriter
 import java.io.File
 import java.util.concurrent.locks.ReentrantLock
+import java.util.logging.Logger
 import kotlin.math.min
 
 object Merger : Thread() {
+    private val log: Logger = Logger.getLogger(Merger::class.java.name)
     private val lock = ReentrantLock()
     private val cond = lock.newCondition()
 
     init {
         name = "Merger-"
+    }
+
+    private data class OverlappedSegments(var lowestKey: String, var highestKey: String, val segments: MutableList<Segment>) {
+        fun overlaps(overlappedSegments: OverlappedSegments): Boolean {
+            return !(this.highestKey < overlappedSegments.lowestKey || overlappedSegments.highestKey < this.lowestKey)
+        }
     }
 
     override fun run() {
@@ -22,138 +31,168 @@ object Merger : Thread() {
             while (level in IndexManager.segmentsByLevel) {
                 val segments = IndexManager.segmentsByLevel[level]
                 segments?.let {
-                    getOverlappedSegments(segments)
-                    IndexManager.segmentsByLevel[level + 1]?.let {
-                            segmentsOfNextLevel ->
-                        for (segment in segments) {
-                            findMergeCandidates(segment, segmentsOfNextLevel)
-                        }
+                    val overlappedSegmentsCurrentLevel = getOverlappedSegments(segments)
+                    IndexManager.segmentsByLevel[level + 1]?.let { segmentsOfNextLevel ->
+                        getOverlappedSegmentsWithNextLevel(segmentsOfNextLevel, overlappedSegmentsCurrentLevel)
                     }
+
+                    merge(level + 1, mergeOverlappedSegments(overlappedSegmentsCurrentLevel))
                 }
                 level += 1
             }
 
-            if (!overlaps.isEmpty()) {
-                // merge the segments
-                for (level in overlaps.keys) {
-                    merge(overlaps[level]!!)
-                }
+            try {
+                lock.lock()
+                cond.await()
+            } finally {
+                lock.unlock()
+            }
+        }
+    }
+
+    private fun mergeOverlappedSegments(overlappedSegmentsCurrentLevel: List<OverlappedSegments>): List<OverlappedSegments> {
+        var i = 1
+        val result = mutableListOf(overlappedSegmentsCurrentLevel.first())
+        while (i < overlappedSegmentsCurrentLevel.size - 1) {
+            val os1 = result.last()
+            val os2 = overlappedSegmentsCurrentLevel[i + 1]
+            result += if (os1.overlaps(os2)) {
+                result.removeLast()
+                OverlappedSegments(
+                    Utils.min(os1.lowestKey, os2.lowestKey),
+                    Utils.max(os1.highestKey, os2.highestKey),
+                    (os1.segments + os2.segments).toMutableList()
+                )
             } else {
-                // sleep if there are no segments to be merged
-                try {
-                    lock.lock()
-                    cond.await()
-                }finally {
-                    lock.unlock()
+                os2
+            }
+            i += 1
+        }
+        return result
+    }
+
+    private fun getOverlappedSegmentsWithNextLevel(
+        segmentsOfNextLevel: List<Segment>, overlappedSegmentsCurrentLevel: List<OverlappedSegments>
+    ) {
+        for (segment in segmentsOfNextLevel) {
+            for (overlappedSegments in overlappedSegmentsCurrentLevel) {
+                if (segment.overlaps(overlappedSegments.lowestKey, overlappedSegments.highestKey)) {
+                    overlappedSegments.segments += segment
+                    overlappedSegments.lowestKey = Utils.min(overlappedSegments.lowestKey, segment.lowestKey())
+                    overlappedSegments.highestKey = Utils.max(overlappedSegments.highestKey, segment.highestKey())
+                    break
                 }
             }
         }
     }
 
     // wake up the thread
-    fun tryMerge(){
+    fun tryMerge() {
         try {
             lock.lock()
             cond.signalAll()
-        }finally {
+        } finally {
             lock.unlock()
         }
     }
 
-    private fun getOverlappedSegments(segments: List<Segment>): List<Segment> {
-        val copy = ArrayList(segments)
-        copy.sortBy { segments -> segments.metadata.lowestKey }
-        var lowestKey = copy.first().lowestKey()
-        var highestKey = copy.first().highestKey()
+    private fun getOverlappedSegments(segments: List<Segment>): List<OverlappedSegments> {
+        val segmentsSortedByFirstKey = ArrayList(segments)
+        segmentsSortedByFirstKey.sortBy { segments -> segments.metadata.lowestKey }
 
-        val overlapped = mutableListOf<Segment>()
-        for (segment in segments) {
-            if (!(segment.highestKey() < lowestKey || highestKey < segment.lowestKey())) {
-                overlapped += segment
-                lowestKey = Utils.min(lowestKey, segment.lowestKey())
-                highestKey = Utils.min(highestKey, segment.highestKey())
+        val result = mutableListOf<OverlappedSegments>()
+        var overlappedSegments =
+            OverlappedSegments(segmentsSortedByFirstKey.first().lowestKey(), segmentsSortedByFirstKey.first().highestKey(), mutableListOf())
+        for (segment in segmentsSortedByFirstKey) {
+            if (!(segment.highestKey() < overlappedSegments.lowestKey || overlappedSegments.highestKey < segment.lowestKey())) {
+                overlappedSegments.segments += segment
+                overlappedSegments.lowestKey = Utils.min(overlappedSegments.lowestKey, segment.lowestKey())
+                overlappedSegments.highestKey = Utils.min(overlappedSegments.highestKey, segment.highestKey())
+            } else {
+                if (overlappedSegments.segments.size > 1) {
+                    // if there are overlapped segments, add them to the result
+                    result += overlappedSegments
+                }
+                overlappedSegments = OverlappedSegments(segment.lowestKey(), segment.highestKey(), mutableListOf())
             }
         }
-        return overlapped
+        return result
     }
 
-    private fun findMergeCandidates(segment: Segment, segmentsOfNextLevel: List<Segment>?): List<Segment> {
-        if (segmentsOfNextLevel == null) {
-            return listOf()
-        }
+    private fun merge(targetLevel: Int, overlappedSegmentsList: List<OverlappedSegments>) {
+        log.info("merge started from key ${overlappedSegmentsList.first().lowestKey} to ${overlappedSegmentsList.last().highestKey} for total ${overlappedSegmentsList.sumOf { it.segments.size }} segments, merged segments will be at level $targetLevel.")
 
-        val candidates = mutableListOf<Segment>()
-        for (segmentNextLevel in segmentsOfNextLevel) {
-            if (segment.overlaps(segmentNextLevel)) {
-                candidates += segmentsOfNextLevel
+        for (overlappedSegments in overlappedSegmentsList) {
+            startVirtualThread {
+                mergeHelper(targetLevel, overlappedSegments.segments)
+                // delete segments
+                IndexManager.remove(overlappedSegments.segments)
+
+                // wake up the Merger
+                //IndexManager.loadNewSegmentAndNotifyMerger(tableWriter.currentPath)
             }
         }
-        if (candidates.isNotEmpty()) {
-            candidates += segment
-        }
-        return candidates
+        log.info("merge finished.")
     }
 
-    private fun merge(paths: Set<Segment>) {
-        println("merging segments: $paths")
-        val readers = mutableListOf<Pair<IndexReader, IndexReader.DBRecordIterator>>()
-        for (p in paths) {
+    private fun mergeHelper(targetLevel: Int, overlappedSegments: MutableList<Segment>) {
+        overlappedSegments.sortWith(compareBy<Segment> { it.level }.thenByDescending { it.id })
+
+        val readers = HashMap<Int, IndexReader.DBRecordIterator>()
+        for (p in overlappedSegments) {
             val reader = IndexReader(File(p.path))
             val iterator = reader.iterator() as IndexReader.DBRecordIterator
-            readers += Pair(reader, iterator)
+            readers[reader.segMetadata.id] = iterator
         }
 
-        // level of the merged segment
-        val level = readers[0].second.metadata.level + 1
+        if (readers.isEmpty()) {
+            return
+        }
 
-        // create the table writer
-        val tableWriter = TableWriter(level)
+        val tableWriter = TableWriter(targetLevel)
         tableWriter.use {
             while (!readers.isEmpty()) {
-                var minRecord = readers[0].second.current()
-                var minReader = readers[0]
-                for (r in readers) {
+                val entry = readers.entries.first()
+                var minSegmentId = entry.key
+                var minIter = entry.value
+                var minRecord = minIter.current()
 
-                    // if the keys are identical, keep the recent one
-                    while (r !== minReader && r.second.current() != null
-                        && r.second.current()!!.key == minRecord!!.key
-                    ) {
-                        if (minReader.second.metadata.id < r.second.metadata.id) {
-                            // if id of `r` is higher, then its data is more recent
-                            minReader.second.next()
-                            minReader = r
-                            minRecord = r.second.current()
+                for ((currentSegId, rIter) in readers.entries) {
+                    if (rIter === minIter) {
+                        continue
+                    }
+
+                    var rRecord = rIter.current()
+                    if (rRecord!!.key == minRecord!!.key) {
+                        if (currentSegId > minSegmentId) {
+                            // same key, but rRecord has a larger segment id, so it is newer
+                            minIter.next()
+                            minRecord = rRecord
+                            minIter = rIter
+                            minSegmentId = currentSegId
                         } else {
-                            // r is older then minRecord
-                            r.second.next()
+                            rRecord = rIter.next()
                         }
                     }
 
-                    val rCurrentRecord = r.second.current()
-                    // if the keys are not the same, the smaller of the two will be written first.
-                    if (rCurrentRecord != null && rCurrentRecord.key < minRecord!!.key) {
-                        minRecord = rCurrentRecord
-                        minReader = r
+                    // the smaller of the two will be written first.
+                    rRecord?.let {
+                        if (it.key < minRecord.key) {
+                            minRecord = it
+                            minIter = rIter
+                            minSegmentId = currentSegId
+                        }
                     }
                 }
-
-                // advance to the next key-value pair
-                minReader.second.next()
-                if (minReader.second.current() == null) {
-                    readers -= minReader
-                    minReader.first.closeAndRemove()
-                }
-
                 // write the smallest record to dick
-                minRecord?.let { tableWriter.write(it) }
+                minRecord?.let {
+                    tableWriter.write(it)
+                    minRecord = minIter.next()
+                    if (minRecord == null) {
+                        readers.remove(minSegmentId)
+                    }
+                }
             }
         }
-
-        // delete segments
-        IndexManager.remove(paths)
-
-        // wake up the Merger
-        IndexManager.loadNewSegmentAndNotifyMerger(tableWriter.currentPath)
-        println("merge finished...")
     }
 }

@@ -9,17 +9,16 @@ import server.storage.SegmentMetadata
 import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
-import java.util.TreeMap
+import java.util.*
 
 open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
     private val reader: RandomAccessFile = RandomAccessFile(f.path, "r")
-    var metadata: SegmentMetadata? = null
+    val segMetadata: SegmentMetadata = readMetadata()
         get() = field
-        private set
 
     private var lastString = byteArrayOf()
 
-    fun readMetadata(): SegmentMetadata {
+    private fun readMetadata(): SegmentMetadata {
         val level = readLevel()
         val fileId = readVInt()
 
@@ -78,19 +77,14 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
     }
 
     override fun iterator(): Iterator<DBRecord?> {
-        return DBRecordIterator()
+        return DBRecordIterator(segMetadata.blocksEndOffset)
     }
 
     // it does what you think
-    inner class DBRecordIterator : Iterator<DBRecord?> {
+    inner class DBRecordIterator(private val endOffset: Long) : Iterator<DBRecord?> {
         private var current: DBRecord?
-        val metadata: SegmentMetadata
 
         init {
-            if (this@IndexReader.metadata == null) {
-                this@IndexReader.metadata = readMetadata()
-            }
-            this.metadata = this@IndexReader.metadata!!
             current = getNextRecord()
         }
 
@@ -100,7 +94,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
 
         override fun next(): DBRecord? {
             val r = current
-            current = if (reader.filePointer >= metadata.blocksEndOffset) {
+            current = if (reader.filePointer >= endOffset) {
                 null
             } else {
                 val operation = getNextRecord()
@@ -154,6 +148,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
         reader.seek(reader.filePointer + 1)
         return readPrefixSharedString()
     }
+
     private fun readLevel(): Int {
         return reader.read()
     }
