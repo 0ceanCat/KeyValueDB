@@ -1,13 +1,12 @@
 package server.storage
 
 import common.Utils
-import server.core.DBRecord
 import server.writerReader.IndexReader
 import server.writerReader.TableWriter
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.locks.ReentrantLock
 import java.util.logging.Logger
-import kotlin.math.min
 
 object Merger : Thread() {
     private val log: Logger = Logger.getLogger(Merger::class.java.name)
@@ -31,12 +30,13 @@ object Merger : Thread() {
             while (level in IndexManager.segmentsByLevel) {
                 val segments = IndexManager.segmentsByLevel[level]
                 segments?.let {
-                    val overlappedSegmentsCurrentLevel = getOverlappedSegments(segments)
-                    IndexManager.segmentsByLevel[level + 1]?.let { segmentsOfNextLevel ->
-                        getOverlappedSegmentsWithNextLevel(segmentsOfNextLevel, overlappedSegmentsCurrentLevel)
+                    val overlappedSegmentsCurrentLevel = getOverlappedSegmentsAtSameLevel(segments)
+                    if (overlappedSegmentsCurrentLevel.isNotEmpty()) {
+                        IndexManager.segmentsByLevel[level + 1]?.let { segmentsOfNextLevel ->
+                            getOverlappedSegmentsWithNextLevel(segmentsOfNextLevel, overlappedSegmentsCurrentLevel)
+                        }
+                        merge(level + 1, mergeOverlappedSegmentsCross2Levels(overlappedSegmentsCurrentLevel))
                     }
-
-                    merge(level + 1, mergeOverlappedSegments(overlappedSegmentsCurrentLevel))
                 }
                 level += 1
             }
@@ -50,7 +50,7 @@ object Merger : Thread() {
         }
     }
 
-    private fun mergeOverlappedSegments(overlappedSegmentsCurrentLevel: List<OverlappedSegments>): List<OverlappedSegments> {
+    private fun mergeOverlappedSegmentsCross2Levels(overlappedSegmentsCurrentLevel: List<OverlappedSegments>): List<OverlappedSegments> {
         var i = 1
         val result = mutableListOf(overlappedSegmentsCurrentLevel.first())
         while (i < overlappedSegmentsCurrentLevel.size - 1) {
@@ -96,7 +96,7 @@ object Merger : Thread() {
         }
     }
 
-    private fun getOverlappedSegments(segments: List<Segment>): List<OverlappedSegments> {
+    private fun getOverlappedSegmentsAtSameLevel(segments: List<Segment>): List<OverlappedSegments> {
         val segmentsSortedByFirstKey = ArrayList(segments)
         segmentsSortedByFirstKey.sortBy { segments -> segments.metadata.lowestKey }
 
@@ -116,26 +116,33 @@ object Merger : Thread() {
                 overlappedSegments = OverlappedSegments(segment.lowestKey(), segment.highestKey(), mutableListOf())
             }
         }
+        if (overlappedSegments.segments.size > 1) {
+            // if there are overlapped segments, add them to the result
+            result += overlappedSegments
+        }
         return result
     }
 
     private fun merge(targetLevel: Int, overlappedSegmentsList: List<OverlappedSegments>) {
         log.info("merge started from key ${overlappedSegmentsList.first().lowestKey} to ${overlappedSegmentsList.last().highestKey} for total ${overlappedSegmentsList.sumOf { it.segments.size }} segments, merged segments will be at level $targetLevel.")
-
+        val countDownLatch = CountDownLatch(overlappedSegmentsList.size)
         for (overlappedSegments in overlappedSegmentsList) {
             startVirtualThread {
-                mergeHelper(targetLevel, overlappedSegments.segments)
+                val mergedSegmentPath = mergeHelper(targetLevel, overlappedSegments.segments)
                 // delete segments
                 IndexManager.remove(overlappedSegments.segments)
 
-                // wake up the Merger
-                //IndexManager.loadNewSegmentAndNotifyMerger(tableWriter.currentPath)
+                mergedSegmentPath?.let {
+                    IndexManager.loadSegment(File(it))
+                }
+                countDownLatch.countDown()
             }
         }
+        countDownLatch.await()
         log.info("merge finished.")
     }
 
-    private fun mergeHelper(targetLevel: Int, overlappedSegments: MutableList<Segment>) {
+    private fun mergeHelper(targetLevel: Int, overlappedSegments: MutableList<Segment>): String? {
         overlappedSegments.sortWith(compareBy<Segment> { it.level }.thenByDescending { it.id })
 
         val readers = HashMap<Int, IndexReader.DBRecordIterator>()
@@ -146,7 +153,7 @@ object Merger : Thread() {
         }
 
         if (readers.isEmpty()) {
-            return
+            return null
         }
 
         val tableWriter = TableWriter(targetLevel)
@@ -194,5 +201,6 @@ object Merger : Thread() {
                 }
             }
         }
+        return tableWriter.currentPath
     }
 }

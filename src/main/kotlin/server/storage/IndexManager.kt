@@ -20,7 +20,7 @@ object IndexManager {
         }
     }
 
-    private fun loadSegment(file: File): Segment {
+    fun loadSegment(file: File): Segment {
         val segment = Segment(file)
         // add the segment into the TreeSet corresponding to its level
         val set = segmentsByLevel.getOrPut(segment.metadata.level) { ArrayList() }

@@ -21,6 +21,7 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
     private fun readMetadata(): SegmentMetadata {
         val level = readLevel()
         val fileId = readVInt()
+        val blocksStartOffset = reader.filePointer
 
         // jump to the footer
         seek(f.length() - 3 * Long.SIZE_BYTES)
@@ -36,6 +37,8 @@ open class IndexReader(private val f: File) : Iterable<DBRecord?>, Closeable {
 
         // read filter
         val bloom = readFilter()
+
+        seek(blocksStartOffset)
         return SegmentMetadata(
             level,
             fileId,
