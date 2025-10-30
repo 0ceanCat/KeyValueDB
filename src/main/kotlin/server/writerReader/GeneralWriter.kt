@@ -4,7 +4,7 @@ import server.core.DBRecord
 import server.enums.DataType
 import server.enums.OperationType
 import java.io.Closeable
-import java.io.RandomAccessFile
+import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -13,14 +13,10 @@ abstract class GeneralWriter : Closeable {
         val prefix = "index"
     }
 
-    protected var writer: RandomAccessFile? = null
+    protected var writer: FileOutputStream? = null
         set(value) {
             field = value
         }
-
-
-    protected var lastOffset = 0L
-        get() = field
 
     private var lastString: ByteArray = byteArrayOf()
 
@@ -32,7 +28,6 @@ abstract class GeneralWriter : Closeable {
 
     // write a record to disk
     open fun write(op: DBRecord, sharePrefix: Boolean = true) {
-        lastOffset = writer?.filePointer!!
         val vType = if (op.value is Int) DataType.INT else DataType.STRING
         if (vType == DataType.STRING) {
             // the value is a string

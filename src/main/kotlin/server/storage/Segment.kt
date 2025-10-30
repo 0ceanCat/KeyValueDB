@@ -1,9 +1,12 @@
 package server.storage
 
 import server.bloom.Bloom
-import server.writerReader.IndexReader
+import server.writerReader.BlockReader
+import server.writerReader.MetadataReader
+import java.io.Closeable
 import java.io.File
-import java.util.TreeMap
+import java.io.FileInputStream
+import java.util.*
 
 data class OffsetRange(val start: Long, val end: Long)
 
@@ -17,18 +20,12 @@ class SegmentMetadata(
     val highestKey: String
 )
 
-class Segment(f: File) : Comparable<Segment> {
+class Segment(f: File) : Comparable<Segment>, Closeable {
     val path: String = f.path
-    val reader: IndexReader = IndexReader(f)
-    val metadata: SegmentMetadata
-    private val sstable: TreeMap<String, Block>
-
-    init {
-        val reader = IndexReader(f)
-        metadata = reader.segMetadata
-        sstable = TreeMap<String, Block>()
-        reader.close()
-    }
+    val fis: FileInputStream = FileInputStream(path)
+    val metadata: SegmentMetadata = MetadataReader(fis.channel).readMetadata()
+    private val sstable: TreeMap<String, Block> = TreeMap<String, Block>()
+    private var inUse = false
 
     val level = metadata.level
     val id = metadata.id
@@ -45,20 +42,22 @@ class Segment(f: File) : Comparable<Segment> {
 
     // find the block that may contain the given key
     fun getPossibleBlock(key: String): Block? {
-        val entry = sstable.floorEntry(key)
-        // block not loaded yet
-        var block: Block? = null
-        if (entry == null) {
-            val offsetRange = metadata.blocksOffset.floorEntry(key).value
-            if (offsetRange != null) {
-                block = Block.loadBlock(reader, offsetRange.start, offsetRange.end)
-                sstable.put(key, block)
-                return block
+        useReader {
+            val entry = sstable.floorEntry(key)
+            // block not loaded yet
+            var block: Block? = null
+            if (entry == null) {
+                val offsetRange = metadata.blocksOffset.floorEntry(key).value
+                if (offsetRange != null) {
+                    block = Block.loadBlock(fis.channel, offsetRange)
+                    sstable[key] = block
+                    return block
+                }
+            } else {
+                block = entry.value
             }
-        } else {
-            block = entry.value
+            return block
         }
-        return block
     }
 
     override fun equals(other: Any?): Boolean {
@@ -88,7 +87,20 @@ class Segment(f: File) : Comparable<Segment> {
         return metadata.highestKey
     }
 
-    fun isEmpty(): Boolean {
-        return sstable.isEmpty()
+    override fun close() {
+        synchronized(this) {
+            fis.close()
+        }
+    }
+
+    private inline fun <T> useReader(func: () -> T): T? {
+        synchronized(this) {
+            if (!fis.isOpen()) {
+                return null
+            }
+            val result = func()
+            (this as Object).notifyAll()
+            return result
+        }
     }
 }

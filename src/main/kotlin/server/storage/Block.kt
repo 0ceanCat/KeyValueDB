@@ -1,35 +1,35 @@
 package server.storage
 
 import server.core.DBRecord
-import server.writerReader.IndexReader
+import server.writerReader.BlockReader
+import java.nio.channels.FileChannel
 import java.util.TreeMap
-import kotlin.collections.set
 
-class Block(private val blockCache: TreeMap<String, DBRecord>, private val startOffset: Long, private val endOffset: Long){
+open class Block(private val blockCache: TreeMap<String, DBRecord>, val offsetRange: OffsetRange): Iterable<DBRecord> {
     companion object {
-        fun loadBlock(reader: IndexReader, startOffset: Long, endOffset: Long): Block {
-            val blockCache = TreeMap<String, DBRecord>()
-            synchronized(reader) {
-                reader.seek(startOffset)
-                var dbRecord = getNextRecord(reader, endOffset)
-                while (dbRecord != null) {
-                    blockCache[dbRecord.key] = dbRecord
-                    dbRecord = getNextRecord(reader, endOffset)
-                }
-                return Block(blockCache, startOffset, endOffset)
-            }
-        }
-
-        // read next record from the block
-        private fun getNextRecord(reader: IndexReader, endOffset: Long): DBRecord? {
-            // out of the block
-            if (reader.getFilePointer() >= endOffset) return null;
-            return reader.getNextRecord()
+        fun loadBlock(fChannel: FileChannel, offsetRange: OffsetRange): Block {
+            return BlockReader(fChannel, offsetRange).readAsBlock()
         }
     }
 
     // return the corresponding value if the given key is found in cache
     fun get(key: String): DBRecord? {
         return blockCache[key]
+    }
+
+    inner class BlockIterator : Iterator<DBRecord> {
+        private val iterator = blockCache.values.iterator()
+
+        override fun hasNext(): Boolean {
+            return iterator.hasNext()
+        }
+
+        override fun next(): DBRecord {
+            return iterator.next()
+        }
+    }
+
+    override fun iterator(): Iterator<DBRecord> {
+        return BlockIterator()
     }
 }

@@ -6,11 +6,14 @@ import server.Config.Companion.BLOOM_FILTER_SIZE
 import server.core.DBRecord
 import common.Utils
 import server.core.MemoryTable
-import server.storage.SegmentMetadata
+import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.logging.Logger
 
 class TableWriter(val level: Int) : GeneralWriter() {
+    private val log: Logger = Logger.getLogger(TableWriter::class.java.name)
+
     companion object {
         private val prefix = "index"
         private val id = AtomicInteger(0)
@@ -51,19 +54,18 @@ class TableWriter(val level: Int) : GeneralWriter() {
         currentName = "${basicPath}_${id.incrementAndGet()}"
         currentPath = "$prefix/$currentName"
         pointer = 0
-        filter = null
+        filter = Bloom(BLOOM_FILTER_SIZE, seed = currentID.toLong())
         blocksOffset.clear()
-        writer = RandomAccessFile(currentPath, "rws")
+        writer = FileOutputStream(currentPath)
         writeHeader()
     }
 
     fun writeTable(table: MemoryTable): String {
-        println("write data to $currentPath...")
-        filter = Bloom(BLOOM_FILTER_SIZE, seed = currentID.toLong())
+        log.info("Write memtable to $currentPath...")
         for (entry in table) {
             write(entry.value)
         }
-        println("$currentPath done")
+        log.info("Memtable all written to $currentPath")
         return currentPath
     }
 
@@ -99,13 +101,12 @@ class TableWriter(val level: Int) : GeneralWriter() {
 
     fun writeHeader(){
         val wt = writer!!
-        wt.seek(0)
         wt.write(level)
         writeVint(currentID)
         pointer = wt.filePointer
     }
 
-    fun writeBlockMetadataAndFooter() {
+    private fun writeBlockMetadataAndFooter() {
         val keyRangeOffset = writer!!.filePointer
         writeString(firstKeyOfSegment!!.toByteArray(Charsets.UTF_8))
         writeString(lastKeyOfSegment!!.toByteArray(Charsets.UTF_8))

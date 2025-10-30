@@ -2,6 +2,7 @@ package server.storage
 
 import server.enums.OperationType
 
+
 class Searcher {
     // search the given key in the segments
     fun searchFromSStable(key: String): Any? {
@@ -21,9 +22,8 @@ class Searcher {
         // get possible block
         val block = sstable.getPossibleBlock(key)
 
-        val record = block?.get(key)
+        val record = block?.get(key) ?: return null
 
-        if (record == null) return null
         return if (record.op == OperationType.DELETE) null else record.value
     }
 

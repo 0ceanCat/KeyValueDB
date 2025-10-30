@@ -127,18 +127,18 @@ object Merger : Thread() {
         log.info("merge started from key ${overlappedSegmentsList.first().lowestKey} to ${overlappedSegmentsList.last().highestKey} for total ${overlappedSegmentsList.sumOf { it.segments.size }} segments, merged segments will be at level $targetLevel.")
         val countDownLatch = CountDownLatch(overlappedSegmentsList.size)
         for (overlappedSegments in overlappedSegmentsList) {
-            startVirtualThread {
+            //startVirtualThread {
                 val mergedSegmentPath = mergeHelper(targetLevel, overlappedSegments.segments)
-                // delete segments
-                IndexManager.remove(overlappedSegments.segments)
-
                 mergedSegmentPath?.let {
                     IndexManager.loadSegment(File(it))
+                    // delete segments
+                    IndexManager.remove(overlappedSegments.segments)
+
                 }
                 countDownLatch.countDown()
-            }
+            //}
         }
-        countDownLatch.await()
+      //  countDownLatch.await()
         log.info("merge finished.")
     }
 
@@ -149,6 +149,7 @@ object Merger : Thread() {
         for (p in overlappedSegments) {
             val reader = IndexReader(File(p.path))
             val iterator = reader.iterator() as IndexReader.DBRecordIterator
+            iterator.next()
             readers[reader.segMetadata.id] = iterator
         }
 
