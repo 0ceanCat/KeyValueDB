@@ -7,6 +7,9 @@ import server.enums.DataType
 import server.storage.Block
 import server.storage.OffsetRange
 import server.storage.SegmentMetadata
+import java.io.Closeable
+import java.io.File
+import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.util.TreeMap
@@ -209,5 +212,64 @@ open class BlocksReader(private val fChannel: FileChannel, private val blocksOff
         fun current(): DBRecord? {
             return current
         }
+    }
+}
+
+open class WalReader(file: File): Iterable<DBRecord>, Closeable {
+    private val fis = FileInputStream(file)
+
+    override fun iterator(): Iterator<DBRecord> {
+        return readAsSequence().iterator()
+    }
+
+    fun readAsSequence(): Sequence<DBRecord> {
+        return generateSequence {
+            val byte = fis.read()
+            if (byte == -1) {
+                null
+            } else {
+                val meta = KVMetadata(byte)
+                val key = String(readStringAsBytes())
+                val v = if (meta.vType == DataType.INT) {
+                    readVInt()
+                } else {
+                    readStringAsBytes()
+                }
+                DBRecord(meta.op, key, v)
+            }
+        }
+    }
+
+    private fun readStringAsBytes(): ByteArray {
+        val kLen = readVInt()
+        val kBytes = ByteArray(kLen)
+        fis.read(kBytes)
+        return kBytes
+    }
+
+    private fun readVInt(): Int {
+        return readVLong().toInt()
+    }
+
+    private fun readVLong(): Long {
+        var readN = fis.read().toLong()
+        // the highest bit indicates if there are more bytes to be read
+        // so, we only need the last 7 bits
+        // 0x7f == 1111111
+        var v = readN and 0x7f
+
+        var shift = 7
+        // 0x80 == 10000000
+        while ((readN and 0x80) != 0L) {
+            readN = fis.read().toLong()
+            v = v or ((readN and 0x7F) shl shift)
+            shift += 7
+        }
+
+        return v
+    }
+
+    override fun close() {
+        fis.close()
     }
 }

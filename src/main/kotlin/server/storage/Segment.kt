@@ -1,12 +1,13 @@
 package server.storage
 
 import server.bloom.Bloom
-import server.writerReader.BlockReader
+import server.writerReader.BlocksReader
 import server.writerReader.MetadataReader
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
-import java.util.*
+import java.util.TreeMap
+import java.util.ArrayList
 
 data class OffsetRange(val start: Long, val end: Long)
 
@@ -21,12 +22,12 @@ class SegmentMetadata(
 )
 
 class Segment(f: File) : Comparable<Segment>, Closeable {
-    val path: String = f.path
-    val fis: FileInputStream = FileInputStream(path)
-    val metadata: SegmentMetadata = MetadataReader(fis.channel).readMetadata()
+    private val path: String = f.path
+    private val fis: FileInputStream = FileInputStream(path)
     private val sstable: TreeMap<String, Block> = TreeMap<String, Block>()
     private var inUse = false
 
+    val metadata: SegmentMetadata = MetadataReader(fis.channel).readMetadata()
     val level = metadata.level
     val id = metadata.id
 
@@ -42,7 +43,7 @@ class Segment(f: File) : Comparable<Segment>, Closeable {
 
     // find the block that may contain the given key
     fun getPossibleBlock(key: String): Block? {
-        useReader {
+        return useReader {
             val entry = sstable.floorEntry(key)
             // block not loaded yet
             var block: Block? = null
@@ -93,9 +94,13 @@ class Segment(f: File) : Comparable<Segment>, Closeable {
         }
     }
 
+    fun getReader(): BlocksReader {
+        return BlocksReader(fis.channel, ArrayList(metadata.blocksOffset.values))
+    }
+
     private inline fun <T> useReader(func: () -> T): T? {
         synchronized(this) {
-            if (!fis.isOpen()) {
+            if (!fis.fd.valid()) {
                 return null
             }
             val result = func()

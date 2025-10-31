@@ -1,7 +1,7 @@
 package server.storage
 
 import common.Utils
-import server.writerReader.IndexReader
+import server.writerReader.BlocksReader
 import server.writerReader.TableWriter
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -145,12 +145,12 @@ object Merger : Thread() {
     private fun mergeHelper(targetLevel: Int, overlappedSegments: MutableList<Segment>): String? {
         overlappedSegments.sortWith(compareBy<Segment> { it.level }.thenByDescending { it.id })
 
-        val readers = HashMap<Int, IndexReader.DBRecordIterator>()
-        for (p in overlappedSegments) {
-            val reader = IndexReader(File(p.path))
-            val iterator = reader.iterator() as IndexReader.DBRecordIterator
+        val readers = mutableListOf<Pair<Int, BlocksReader.DBRecordIterator>>()
+        for (segment in overlappedSegments) {
+            val reader = segment.getReader()
+            val iterator = reader.iterator() as BlocksReader.DBRecordIterator
             iterator.next()
-            readers[reader.segMetadata.id] = iterator
+            readers += segment.id to iterator
         }
 
         if (readers.isEmpty()) {
@@ -160,12 +160,12 @@ object Merger : Thread() {
         val tableWriter = TableWriter(targetLevel)
         tableWriter.use {
             while (!readers.isEmpty()) {
-                val entry = readers.entries.first()
-                var minSegmentId = entry.key
-                var minIter = entry.value
+                val entry = readers.first()
+                var minSegmentId = entry.first
+                var minIter = entry.second
                 var minRecord = minIter.current()
 
-                for ((currentSegId, rIter) in readers.entries) {
+                for ((currentSegId, rIter) in readers) {
                     if (rIter === minIter) {
                         continue
                     }
@@ -197,7 +197,7 @@ object Merger : Thread() {
                     tableWriter.write(it)
                     minRecord = minIter.next()
                     if (minRecord == null) {
-                        readers.remove(minSegmentId)
+                        readers.removeIf { it.first == (minSegmentId) }
                     }
                 }
             }

@@ -7,9 +7,9 @@ import server.Config
 import server.enums.OperationType
 import server.storage.IndexManager
 import server.storage.Searcher
-import server.writerReader.IndexReader
 import server.writerReader.TableWriter
-import server.writerReader.WAL
+import server.writerReader.WALWriter
+import server.writerReader.WalReader
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.LinkedBlockingQueue
@@ -18,7 +18,7 @@ class Database : Closeable {
     private val logger: Logger = LogManager.getLogger(Database::class)
     private var table = MemoryTable()
     private val immutableTables = LinkedBlockingQueue<MemoryTable>()
-    private var wal: WAL = WAL()
+    private var walWriter: WALWriter = WALWriter()
     private val searcher = Searcher()
     private val threshold = Config.MEMORY_TABLE_THRESHOLD
     private val lock = Any()
@@ -57,13 +57,11 @@ class Database : Closeable {
     }
 
     fun recoverFromWal(wal: File) {
-        IndexReader(wal).use {
+        WalReader(wal).use {
             reader ->
             logger.info("reloading wal from ${wal.name}...")
-            var dbRecord = reader.getNextRecord()
-            while (dbRecord != null) {
-                table.put(dbRecord.key, dbRecord)
-                dbRecord = reader.getNextRecord()
+            for(record in reader) {
+                table.put(record.key, record)
             }
         }
     }
@@ -87,8 +85,8 @@ class Database : Closeable {
         val toBeWritten = table
         table = MemoryTable()
         immutableTables.add(toBeWritten)
-        val lastWal = wal
-        wal = WAL()
+        val lastWal = walWriter
+        walWriter = WALWriter()
         Thread.startVirtualThread {
             val path = writeToDisc(toBeWritten)
             IndexManager.loadNewSegmentAndNotifyMerger(path)
@@ -102,11 +100,11 @@ class Database : Closeable {
         if (table.size > 0) {
             writeToDisc(table)
         }
-        wal.close()
+        walWriter.close()
     }
 
     private fun writeWAL(op: DBRecord) {
-        wal.write(op)
+        walWriter.write(op)
     }
 
     private fun writeToDisc(table: MemoryTable): String {
