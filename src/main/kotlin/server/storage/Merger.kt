@@ -27,19 +27,23 @@ object Merger : Thread() {
         while (true) {
             // get segments to be merged
             var level = 0
-            while (level in IndexManager.segmentsByLevel) {
-                val segments = IndexManager.segmentsByLevel[level]
-                segments?.let {
-                    val overlappedSegmentsCurrentLevel = getOverlappedSegmentsAtSameLevel(segments)
-                    if (overlappedSegmentsCurrentLevel.isNotEmpty()) {
-                        IndexManager.segmentsByLevel[level + 1]?.let { segmentsOfNextLevel ->
-                            getOverlappedSegmentsWithNextLevel(segmentsOfNextLevel, overlappedSegmentsCurrentLevel)
+            IndexManager.getLastVersionSegments().use {
+                segmentsByLevel ->
+                while (level in segmentsByLevel) {
+                    val segments = segmentsByLevel[level]
+                    segments?.let {
+                        val overlappedSegmentsCurrentLevel = getOverlappedSegmentsAtSameLevel(segments)
+                        if (overlappedSegmentsCurrentLevel.isNotEmpty()) {
+                            segmentsByLevel[level + 1]?.let { segmentsOfNextLevel ->
+                                getOverlappedSegmentsWithNextLevel(segmentsOfNextLevel, overlappedSegmentsCurrentLevel)
+                            }
+                            merge(level + 1, mergeOverlappedSegmentsCross2Levels(overlappedSegmentsCurrentLevel))
                         }
-                        merge(level + 1, mergeOverlappedSegmentsCross2Levels(overlappedSegmentsCurrentLevel))
                     }
+                    level += 1
                 }
-                level += 1
             }
+
 
             try {
                 lock.lock()

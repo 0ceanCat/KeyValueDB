@@ -47,7 +47,6 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
         fos.write(v.toInt())
     }
 
-
     protected fun writeKeySharingPrefix(key: String) {
         val bytes = key.toByteArray()
         var sharedPrefix = 0
@@ -114,7 +113,6 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
             writeWithoutSharingPrefix(k)
         writeVint(v)
     }
-
 }
 
 class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${BASIC_PATH}_${id.incrementAndGet()}")) : GeneralWriter(fos) {
@@ -276,7 +274,6 @@ class WALWriter: GeneralWriter {
 
     constructor() : super(FileOutputStream("${FOLDER}/${WAL_PREFIX}_$id"))
     private var currentPath = "${FOLDER}/${WAL_PREFIX}_$id"
-
 
     override fun write(record: DBRecord) {
         val vType = if (record.value is Int) DataType.INT else DataType.STRING

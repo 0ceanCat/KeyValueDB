@@ -25,7 +25,6 @@ class Segment(f: File) : Comparable<Segment>, Closeable {
     private val path: String = f.path
     private val fis: FileInputStream = FileInputStream(path)
     private val sstable: TreeMap<String, Block> = TreeMap<String, Block>()
-    private var inUse = false
 
     val metadata: SegmentMetadata = MetadataReader(fis.channel).readMetadata()
     val level = metadata.level
@@ -43,27 +42,24 @@ class Segment(f: File) : Comparable<Segment>, Closeable {
 
     // find the block that may contain the given key
     fun getPossibleBlock(key: String): Block? {
-        return useReader {
-            val entry = sstable.floorEntry(key)
-            // block not loaded yet
-            var block: Block? = null
-            if (entry == null) {
-                val offsetRange = metadata.blocksOffset.floorEntry(key).value
-                if (offsetRange != null) {
-                    block = Block.loadBlock(fis.channel, offsetRange)
-                    sstable[key] = block
-                    return block
-                }
-            } else {
-                block = entry.value
-            }
-            return block
+        val entry = sstable.floorEntry(key)
+
+        if (entry != null) {
+            return entry.value
         }
+
+        var block: Block? = null
+        val offsetRange = metadata.blocksOffset.floorEntry(key).value
+        if (offsetRange != null) {
+            block = Block.loadBlock(fis.channel, offsetRange)
+            sstable[key] = block
+        }
+        return block
     }
 
     override fun equals(other: Any?): Boolean {
         return if (other is Segment)
-            path == other.path
+            id == other.id
         else
             false
     }
@@ -96,16 +92,5 @@ class Segment(f: File) : Comparable<Segment>, Closeable {
 
     fun getReader(): BlocksReader {
         return BlocksReader(fis.channel, ArrayList(metadata.blocksOffset.values))
-    }
-
-    private inline fun <T> useReader(func: () -> T): T? {
-        synchronized(this) {
-            if (!fis.fd.valid()) {
-                return null
-            }
-            val result = func()
-            (this as Object).notifyAll()
-            return result
-        }
     }
 }
