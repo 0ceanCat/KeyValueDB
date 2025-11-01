@@ -34,16 +34,15 @@ fun FileOutputStream.writeVInt(v: Int) {
 abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
     companion object {
         const val FOLDER = "index"
+        init {
+            if (!Files.exists(Path.of(FOLDER))) {
+                Files.createDirectory(Path.of(FOLDER))
+            }
+        }
     }
 
     private var lastString: ByteArray = byteArrayOf()
     protected val fc: FileChannel = fos.channel
-
-    init {
-        if (!Files.exists(Path.of(FOLDER))) {
-            Files.createDirectory(Path.of(FOLDER))
-        }
-    }
 
     // write a record to disk
     abstract fun write(op: DBRecord)

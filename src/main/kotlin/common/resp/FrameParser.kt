@@ -25,12 +25,13 @@ class FrameParser(frame: Frame) {
         throw ProtocolParseException("All elements have been consumed.")
     }
 
-    fun getNextAsBytes(): ByteArray {
+    fun getNext(): Any {
         if (frameElements.hasNext()) {
             val frame = frameElements.next()
             return when(frame) {
                 is Frame.FString -> frame.data.toByteArray(Charsets.UTF_8)
                 is Frame.FBulk -> frame.data
+                is Frame.FInteger -> frame.data
                 else -> throw ProtocolParseException("Expecting an array or a bulk, but got: $frame")
             }
         }

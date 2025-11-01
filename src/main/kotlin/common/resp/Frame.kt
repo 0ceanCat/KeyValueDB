@@ -121,8 +121,20 @@ sealed class Frame {
     data class FError(val data: String) : Frame()
     data class FInteger(val data: Int) : Frame()
     data class FArray(val array: MutableList<Frame>) : Frame() {
-        fun add(data: ByteArray) {
+        fun add(data: Any) {
+            if (data is Int) {
+                addInt(data)
+            } else if (data is ByteArray) {
+                addBytes(data)
+            }
+        }
+
+        fun addBytes(data: ByteArray) {
             array.add(FBulk(data))
+        }
+
+        fun addInt(data: Int) {
+            array.add(FInteger(data))
         }
     }
     data class FBoolean(val data: Boolean) : Frame()

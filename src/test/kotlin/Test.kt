@@ -18,5 +18,9 @@ class TestClient(val n: Int){
 }
 
 fun main() {
-    TestClient(1).start()
+    val client = Client()
+    client.set("a", 2)
+    client.set("b", "haha")
+    println(client.get("a"))
+    println(client.get("b"))
 }
