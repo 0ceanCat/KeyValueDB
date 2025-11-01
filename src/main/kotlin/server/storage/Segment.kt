@@ -21,14 +21,20 @@ class SegmentMetadata(
     val highestKey: String
 )
 
-class Segment(f: File) : Comparable<Segment>, Closeable {
-    private val path: String = f.path
-    private val fis: FileInputStream = FileInputStream(path)
+class Segment(private val file: File) : Comparable<Segment>, Closeable {
+    private val fis: FileInputStream = FileInputStream(file)
     private val sstable: TreeMap<String, Block> = TreeMap<String, Block>()
-
+    val path = file.path
     val metadata: SegmentMetadata = MetadataReader(fis.channel).readMetadata()
     val level = metadata.level
     val id = metadata.id
+
+    companion object {
+        const val FILE_PREFIX = "segment"
+        fun getIdFromName(name: String): Int {
+            return name.split("_")[1].toInt()
+        }
+    }
 
     // verify if 2 segments are overlapping
     fun overlaps(lowestKey: String, highestKey: String): Boolean {
@@ -85,9 +91,11 @@ class Segment(f: File) : Comparable<Segment>, Closeable {
     }
 
     override fun close() {
-        synchronized(this) {
-            fis.close()
-        }
+        fis.close()
+    }
+
+    fun remove() {
+        file.delete()
     }
 
     fun getReader(): BlocksReader {

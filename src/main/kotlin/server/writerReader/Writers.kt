@@ -8,6 +8,7 @@ import server.core.DBRecord
 import server.core.MemoryTable
 import server.enums.DataType
 import server.enums.OperationType
+import server.storage.Segment
 import java.io.Closeable
 import java.io.File
 import java.io.FileOutputStream
@@ -16,6 +17,19 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
+
+fun FileOutputStream.writeVLong(v_: Long) {
+    var v = v_
+    while ((v and 0x7F.inv()) != 0L) {
+        write((v and 0x7F or 0x80).toInt())
+        v = v ushr 7
+    }
+    write(v.toInt())
+}
+
+fun FileOutputStream.writeVInt(v: Int) {
+    writeVLong(v.toLong())
+}
 
 abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
     companion object {
@@ -34,19 +48,6 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
     // write a record to disk
     abstract fun write(op: DBRecord)
 
-    protected fun writeVint(_v: Int) {
-        writeVLong(_v.toLong())
-    }
-
-    protected fun writeVLong(_v: Long) {
-        var v = _v
-        while ((v and 0x7F.inv()) != 0L) {
-            fos.write((v and 0x7F or 0x80).toInt())
-            v = v ushr 7
-        }
-        fos.write(v.toInt())
-    }
-
     protected fun writeKeySharingPrefix(key: String) {
         val bytes = key.toByteArray()
         var sharedPrefix = 0
@@ -58,20 +59,20 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
 
         lastString = bytes
 
-        writeVint(sharedPrefix)
+        fos.writeVInt(sharedPrefix)
         writeBytes(bytes.sliceArray(sharedPrefix until bytes.size))
     }
 
     protected fun writeWithoutSharingPrefix(key: String) {
         val bytes = key.toByteArray()
         lastString = bytes
-        writeVint(0)
+        fos.writeVInt(0)
         writeBytes(bytes)
     }
 
     protected fun writeBytes(bytes: ByteArray) {
         val len = bytes.size
-        writeVint(len)
+        fos.writeVInt(len)
         fos.write(bytes)
     }
 
@@ -111,22 +112,21 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
             writeKeySharingPrefix(k)
         else
             writeWithoutSharingPrefix(k)
-        writeVint(v)
+        fos.writeVInt(v)
     }
 }
 
-class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${BASIC_PATH}_${id.incrementAndGet()}")) : GeneralWriter(fos) {
+class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${Segment.FILE_PREFIX}_${id.incrementAndGet()}")) : GeneralWriter(fos) {
     private val log: Logger = Logger.getLogger(TableWriter::class.java.name)
 
     companion object {
         private const val PREFIX = "index"
-        private const val BASIC_PATH = "segment"
         private val id = AtomicInteger(0)
 
         init {
             var max = -1
-            for (f in Utils.readFilesFrom(PREFIX) { it.startsWith("segment") }) {
-                max = maxOf(max, f.name.split("_")[1].toInt())
+            for (f in Utils.readFilesFrom(PREFIX) { it.startsWith(Segment.FILE_PREFIX) }) {
+                max = maxOf(max, Segment.getIdFromName(f.name))
             }
             id.set(max + 1)
         }
@@ -140,7 +140,7 @@ class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${BA
 
     private val filter: Bloom
 
-    private val currentName = "${BASIC_PATH}_${id.incrementAndGet()}"
+    private val currentName = "${Segment.FILE_PREFIX}_${id.incrementAndGet()}"
 
     private var currentID = id.get()
 
@@ -209,7 +209,7 @@ class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${BA
 
     fun writeHeader(){
         fos.write(level)
-        writeVint(currentID)
+        fos.writeVInt(currentID)
         pointer = fc.position()
     }
 
@@ -236,16 +236,16 @@ class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${BA
         for ((key, blockOffset) in blocksOffset) {
             val byteArray = key.toByteArray(Charsets.UTF_8)
             writeBytes(byteArray)
-            writeVLong(blockOffset)
+            fos.writeVLong(blockOffset)
         }
     }
 
     private fun writeFilter() {
-        writeVint(filter.seed.toInt())
-        writeVint(filter.k)
-        writeVint(filter.bitmap.size)
+        fos.writeVInt(filter.seed.toInt())
+        fos.writeVInt(filter.k)
+        fos.writeVInt(filter.bitmap.size)
         for (l in filter.bitmap) {
-            writeVLong(l)
+            fos.writeVLong(l)
         }
     }
 
@@ -284,7 +284,7 @@ class WALWriter: GeneralWriter {
             writeBytes(record.value as ByteArray)
         } else {
             // the value is an int
-            writeVint(record.value as Int)
+            fos.writeVInt(record.value as Int)
         }
     }
 
@@ -294,5 +294,20 @@ class WALWriter: GeneralWriter {
 
     fun delete() {
         File(currentPath).delete()
+    }
+}
+
+class VerfWriter {
+    companion object {
+        private const val VERF = "verf"
+    }
+    private val fos: FileOutputStream = FileOutputStream(VERF)
+    fun write(version: Int, segments: List<Segment>) {
+        fos.write(1) // means there are more versions to be read
+        fos.writeVInt(version)
+        fos.writeVInt(segments.size)
+        for (segment in segments) {
+            fos.writeVInt(segment.id)
+        }
     }
 }

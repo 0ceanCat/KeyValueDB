@@ -7,6 +7,7 @@ import server.enums.DataType
 import server.storage.Block
 import server.storage.OffsetRange
 import server.storage.SegmentMetadata
+import server.writerReader.readVLong
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
@@ -66,6 +67,28 @@ fun ByteBuffer.readBytes(): ByteArray {
     val vBytes = ByteArray(vLen)
     get(vBytes)
     return vBytes
+}
+
+fun FileInputStream.readVLong(): Long {
+    var readN = read().toLong()
+    // the highest bit indicates if there are more bytes to be read
+    // so, we only need the last 7 bits
+    // 0x7f == 1111111
+    var v = readN and 0x7f
+
+    var shift = 7
+    // 0x80 == 10000000
+    while ((readN and 0x80) != 0L) {
+        readN = read().toLong()
+        v = v or ((readN and 0x7F) shl shift)
+        shift += 7
+    }
+
+    return v
+}
+
+fun FileInputStream.readVInt(): Int {
+    return readVLong().toInt()
 }
 
 open class MetadataReader(private val fChannel: FileChannel) {
@@ -231,7 +254,7 @@ open class WalReader(file: File): Iterable<DBRecord>, Closeable {
                 val meta = KVMetadata(byte)
                 val key = String(readStringAsBytes())
                 val v = if (meta.vType == DataType.INT) {
-                    readVInt()
+                    fis.readVInt()
                 } else {
                     readStringAsBytes()
                 }
@@ -241,35 +264,50 @@ open class WalReader(file: File): Iterable<DBRecord>, Closeable {
     }
 
     private fun readStringAsBytes(): ByteArray {
-        val kLen = readVInt()
+        val kLen = fis.readVInt()
         val kBytes = ByteArray(kLen)
         fis.read(kBytes)
         return kBytes
     }
 
-    private fun readVInt(): Int {
-        return readVLong().toInt()
-    }
-
-    private fun readVLong(): Long {
-        var readN = fis.read().toLong()
-        // the highest bit indicates if there are more bytes to be read
-        // so, we only need the last 7 bits
-        // 0x7f == 1111111
-        var v = readN and 0x7f
-
-        var shift = 7
-        // 0x80 == 10000000
-        while ((readN and 0x80) != 0L) {
-            readN = fis.read().toLong()
-            v = v or ((readN and 0x7F) shl shift)
-            shift += 7
-        }
-
-        return v
-    }
-
     override fun close() {
         fis.close()
+    }
+}
+
+class VerFReader {
+    companion object {
+        private const val VERF = "verf"
+    }
+
+    private val fis = FileInputStream(VERF)
+
+    fun readSegmentsIds(): Pair<Int, Set<Int>> {
+        var oldestVersion = -1
+        var oldestSegmentsIds = setOf<Int>()
+        var versionAndSegmentsIds = readVersion()
+        while (versionAndSegmentsIds != null) {
+            if (versionAndSegmentsIds.first > oldestVersion) {
+                oldestSegmentsIds = versionAndSegmentsIds.second
+                oldestVersion = versionAndSegmentsIds.first
+            }
+            versionAndSegmentsIds = readVersion()
+        }
+
+        return oldestVersion to oldestSegmentsIds
+    }
+
+    private fun readVersion(): Pair<Int, Set<Int>>? {
+        val result = mutableSetOf<Int>()
+        val hasMore = fis.read()
+        if (hasMore == 1) {
+            val version = fis.readVInt()
+            val nOfSegments = fis.readVInt()
+            repeat(nOfSegments) {
+                result += fis.readVInt()
+            }
+            return version to result
+        }
+        return null
     }
 }

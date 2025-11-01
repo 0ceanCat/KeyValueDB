@@ -13,9 +13,9 @@ class MemoryTable : Iterable<Entry<String, DBRecord>> {
         return table[key]?.first
     }
 
-    fun put(key: String, value: DBRecord) {
+    fun put(key: String, value: DBRecord): DBRecord? {
         val kvSize = updateSize(key, value.value)
-        table[key] = value to kvSize
+        return table.put(key, value to kvSize)?.first
     }
 
     private fun updateSize(key: String, v: Any): Int {

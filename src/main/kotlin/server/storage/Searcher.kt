@@ -6,19 +6,18 @@ import server.enums.OperationType
 class Searcher {
     // search the given key in the segments
     fun searchFromSStable(key: String): Any? {
-        val segmentRef = IndexManager.getLastVersionSegments()
-        return segmentRef.use {
+        return IndexManager.startSearchIn {
             segmentsByLevel ->
             for (level in segmentsByLevel.keys) {
                 val segments = segmentsByLevel[level]!!
                 for (segment in segments) {
                     if (segment.mayContain(key)){
                         val v = lookUpKey(segment, key)
-                        if (v != null) return@use v
+                        if (v != null) return@startSearchIn v
                     }
                 }
             }
-            return@use null
+            return@startSearchIn null
         }
     }
 

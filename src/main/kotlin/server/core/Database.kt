@@ -1,6 +1,7 @@
 package server.core
 
 import common.Command
+import common.resp.Frame
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import server.Config
@@ -14,6 +15,10 @@ import java.io.Closeable
 import java.io.File
 import java.util.concurrent.LinkedBlockingQueue
 
+fun Boolean.toInt(): Int {
+    return if (this) 1 else 0
+}
+
 class Database : Closeable {
     private val logger: Logger = LogManager.getLogger(Database::class)
     private var table = MemoryTable()
@@ -23,18 +28,30 @@ class Database : Closeable {
     private val threshold = Config.MEMORY_TABLE_THRESHOLD
     private val lock = Any()
 
-    fun executeCmd(cmd: Command) {
+    fun executeCmd(cmd: Command): Frame {
         when(cmd){
             is Command.Del -> {
-                delete(cmd.key)
+                val deleted = delete(cmd.key)
+                return Frame.FInteger(deleted.toInt())
             }
             is Command.Get -> {
-                get(cmd.key)
+                val value = get(cmd.key)
+                if (value == null) {
+                    return Frame.FString("(nil)")
+                }
+                return if (value is ByteArray) {
+                    Frame.FBulk(value)
+                } else {
+                    Frame.FInteger(value as Int)
+                }
             }
             is Command.Set -> {
                 insert(cmd.key, cmd.value)
+                return Frame.FString("OK")
             }
-            is Command.Unknown -> {}
+            is Command.Unknown -> {
+                return Frame.FError("Unknown Command")
+            }
         }
     }
 
@@ -52,8 +69,8 @@ class Database : Closeable {
         return v ?: searcher.searchFromSStable(key)
     }
 
-    fun delete(key: String) {
-        updateTable(OperationType.DELETE, key, 0)
+    fun delete(key: String): Boolean {
+        return updateTable(OperationType.DELETE, key, 0) != null
     }
 
     fun recoverFromWal(wal: File) {
@@ -66,14 +83,15 @@ class Database : Closeable {
         }
     }
 
-    private fun updateTable(op: OperationType, key: String, v: Any) {
+    private fun updateTable(op: OperationType, key: String, v: Any): DBRecord? {
         val dbOperation = DBRecord(op, key, v)
         synchronized(lock){
             writeWAL(dbOperation)
-            table.put(key, dbOperation)
+            val result = table.put(key, dbOperation)
             if (checkThreshold()) {
                 writeTableToDisc()
             }
+            return result
         }
     }
 

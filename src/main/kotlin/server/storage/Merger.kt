@@ -1,15 +1,16 @@
 package server.storage
 
 import common.Utils
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import server.writerReader.BlocksReader
 import server.writerReader.TableWriter
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.locks.ReentrantLock
-import java.util.logging.Logger
 
 object Merger : Thread() {
-    private val log: Logger = Logger.getLogger(Merger::class.java.name)
+    private val log: Logger = LoggerFactory.getLogger(Merger::class.java)
     private val lock = ReentrantLock()
     private val cond = lock.newCondition()
 
@@ -27,7 +28,7 @@ object Merger : Thread() {
         while (true) {
             // get segments to be merged
             var level = 0
-            IndexManager.getLastVersionSegments().use {
+            IndexManager.startSearchIn {
                 segmentsByLevel ->
                 while (level in segmentsByLevel) {
                     val segments = segmentsByLevel[level]

@@ -20,6 +20,6 @@ class Connection(socket: Socket) {
     }
 
     fun readFrame(): Frame {
-        return Frame.Companion.decodedFrom(input)
+        return Frame.decodedFrom(input)
     }
 }
