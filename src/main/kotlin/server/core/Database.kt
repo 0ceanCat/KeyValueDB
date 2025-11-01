@@ -8,7 +8,7 @@ import server.Config
 import server.enums.OperationType
 import server.storage.IndexManager
 import server.storage.Searcher
-import server.writerReader.TableWriter
+import server.writerReader.SegmentWriter
 import server.writerReader.WALWriter
 import server.writerReader.WalReader
 import java.io.Closeable
@@ -126,7 +126,7 @@ class Database : Closeable {
     }
 
     private fun writeToDisc(table: MemoryTable): String {
-        TableWriter(0).use {
+        SegmentWriter(0).use {
             tableWriter ->
             return tableWriter.writeTable(table)
         }

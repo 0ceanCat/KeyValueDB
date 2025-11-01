@@ -18,6 +18,9 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
+
+const val FOLDER = "index"
+
 fun FileOutputStream.writeVLong(v_: Long) {
     var v = v_
     while ((v and 0x7F.inv()) != 0L) {
@@ -33,7 +36,6 @@ fun FileOutputStream.writeVInt(v: Int) {
 
 abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
     companion object {
-        const val FOLDER = "index"
         init {
             if (!Files.exists(Path.of(FOLDER))) {
                 Files.createDirectory(Path.of(FOLDER))
@@ -115,16 +117,15 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
     }
 }
 
-class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${Segment.FILE_PREFIX}_${id.incrementAndGet()}")) : GeneralWriter(fos) {
-    private val log: Logger = Logger.getLogger(TableWriter::class.java.name)
+class SegmentWriter(val level: Int, fos: FileOutputStream = FileOutputStream("$FOLDER/${Segment.FILE_PREFIX}_${id.incrementAndGet()}")) : GeneralWriter(fos) {
+    private val log: Logger = Logger.getLogger(SegmentWriter::class.java.name)
 
     companion object {
-        private const val PREFIX = "index"
         private val id = AtomicInteger(0)
 
         init {
             var max = -1
-            for (f in Utils.readFilesFrom(PREFIX) { it.startsWith(Segment.FILE_PREFIX) }) {
+            for (f in Utils.readFilesFrom(FOLDER) { it.startsWith(Segment.FILE_PREFIX) }) {
                 max = maxOf(max, Segment.getIdFromName(f.name))
             }
             id.set(max + 1)
@@ -139,7 +140,7 @@ class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${Se
 
     private val filter: Bloom
 
-    private val currentName = "${Segment.FILE_PREFIX}_${id.incrementAndGet()}"
+    private val currentName = "${Segment.FILE_PREFIX}_${id.get()}"
 
     private var currentID = id.get()
 
@@ -149,7 +150,7 @@ class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${Se
 
     private var lastKeyOfSegment: String? = null
 
-    val currentPath = "$PREFIX/$currentName"
+    val currentPath = "$FOLDER/$currentName"
 
     init {
         pointer = 0
@@ -252,7 +253,7 @@ class TableWriter(val level: Int, fos: FileOutputStream = FileOutputStream("${Se
         var v = n
         repeat(Long.SIZE_BYTES) {
             fos.write((v and 0xff).toInt())
-            v = v shr Byte.SIZE_BYTES
+            v = v shr Byte.SIZE_BITS
         }
     }
 }
@@ -300,7 +301,7 @@ class VerfWriter {
     companion object {
         private const val VERF = "verf"
     }
-    private val fos: FileOutputStream = FileOutputStream(VERF)
+    private val fos: FileOutputStream = FileOutputStream("$FOLDER/$VERF")
     fun write(version: Int, segments: List<Segment>) {
         fos.write(1) // means there are more versions to be read
         fos.writeVInt(version)

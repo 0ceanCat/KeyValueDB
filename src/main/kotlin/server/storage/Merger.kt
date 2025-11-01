@@ -4,7 +4,7 @@ import common.Utils
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import server.writerReader.BlocksReader
-import server.writerReader.TableWriter
+import server.writerReader.SegmentWriter
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.locks.ReentrantLock
@@ -162,8 +162,8 @@ object Merger : Thread() {
             return null
         }
 
-        val tableWriter = TableWriter(targetLevel)
-        tableWriter.use {
+        val segmentWriter = SegmentWriter(targetLevel)
+        segmentWriter.use {
             while (!readers.isEmpty()) {
                 val entry = readers.first()
                 var minSegmentId = entry.first
@@ -199,7 +199,7 @@ object Merger : Thread() {
                 }
                 // write the smallest record to dick
                 minRecord?.let {
-                    tableWriter.write(it)
+                    segmentWriter.write(it)
                     minRecord = minIter.next()
                     if (minRecord == null) {
                         readers.removeIf { it.first == (minSegmentId) }
@@ -207,6 +207,6 @@ object Merger : Thread() {
                 }
             }
         }
-        return tableWriter.currentPath
+        return segmentWriter.currentPath
     }
 }

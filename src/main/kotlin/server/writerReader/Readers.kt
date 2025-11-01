@@ -7,7 +7,6 @@ import server.enums.DataType
 import server.storage.Block
 import server.storage.OffsetRange
 import server.storage.SegmentMetadata
-import server.writerReader.readVLong
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
@@ -44,7 +43,8 @@ fun ByteBuffer.readByte(): Int {
 fun ByteBuffer.readLong(): Long {
     var v = 0L
     for (i in 0 until Long.SIZE_BYTES) {
-        v = (get().toLong() shl (Byte.SIZE_BYTES * i)) or v
+        val u8 = get().toLong() and 0xFF // remove sign bit
+        v = (u8 shl (Byte.SIZE_BITS * i)) or v
     }
     return v
 }
@@ -59,7 +59,11 @@ fun ByteBuffer.writeMode() {
 
 fun ByteBuffer.readString(): String {
     val kLen = readVInt()
-    return String(slice(position(), kLen).array(), Charsets.UTF_8)
+    val slice = slice(position(), kLen)
+    val bytes = ByteArray(slice.remaining())
+    slice.get(bytes)
+    position(position() + kLen)
+    return String(bytes, Charsets.UTF_8)
 }
 
 fun ByteBuffer.readBytes(): ByteArray {
@@ -102,21 +106,21 @@ open class MetadataReader(private val fChannel: FileChannel) {
 
         smallBuffer.writeMode()
         val footerOffset = fChannel.size() - 3 * Long.SIZE_BYTES
-        fChannel.read(arrayOf(smallBuffer), footerOffset.toInt(), smallBuffer.limit())
+        fChannel.read(smallBuffer, footerOffset)
 
         smallBuffer.readMode()
         val keyRangeOffset = smallBuffer.readLong()
         val blocksIndexOffset = smallBuffer.readLong()
         val filterOffset = smallBuffer.readLong()
 
-        val bigBuffer = ByteBuffer.allocate((keyRangeOffset - footerOffset).toInt())
-        fChannel.read(arrayOf(bigBuffer), keyRangeOffset.toInt(), bigBuffer.limit())
+        val bigBuffer = ByteBuffer.allocate((footerOffset - keyRangeOffset).toInt())
+        fChannel.read(bigBuffer, keyRangeOffset)
 
         bigBuffer.readMode()
         val firstKey = bigBuffer.readString()
         val lastKey = bigBuffer.readString()
 
-        val blocksIndex = readBlocksIndex(bigBuffer, (blocksIndexOffset - filterOffset).toInt(), keyRangeOffset - 1)
+        val blocksIndex = readBlocksIndex(bigBuffer, (filterOffset - blocksIndexOffset).toInt(), filterOffset)
 
         // read filter
         val bloom = readFilter(bigBuffer)
@@ -200,7 +204,7 @@ open class BlockReader(private val fChannel: FileChannel, private val offsetRang
     private fun readBlocksToByteBuffer(): ByteBuffer {
         val (startOffset, endOffset) = offsetRange
         val blockBuffer = ByteBuffer.allocate((endOffset - startOffset).toInt())
-        fChannel.read(arrayOf(blockBuffer), startOffset.toInt(), blockBuffer.limit())
+        fChannel.read(blockBuffer, startOffset)
         blockBuffer.readMode()
         return blockBuffer
     }
@@ -280,7 +284,7 @@ class VerFReader {
         private const val VERF = "verf"
     }
 
-    private val fis = FileInputStream(VERF)
+    private val fis = FileInputStream("$FOLDER/$VERF")
 
     fun readSegmentsIds(): Pair<Int, Set<Int>> {
         var oldestVersion = -1

@@ -22,7 +22,7 @@ class SegmentMetadata(
 )
 
 class Segment(private val file: File) : Comparable<Segment>, Closeable {
-    private val fis: FileInputStream = FileInputStream(file)
+  private val fis: FileInputStream = FileInputStream(file)
     private val sstable: TreeMap<String, Block> = TreeMap<String, Block>()
     val path = file.path
     val metadata: SegmentMetadata = MetadataReader(fis.channel).readMetadata()

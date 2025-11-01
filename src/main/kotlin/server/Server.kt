@@ -7,7 +7,7 @@ import org.apache.logging.log4j.Logger
 import server.core.ClientHandler
 import server.core.Database
 import server.storage.Merger
-import server.writerReader.GeneralWriter
+import server.writerReader.FOLDER
 import server.writerReader.WALWriter
 import java.net.ServerSocket
 
@@ -16,7 +16,7 @@ class Server(private val port: Int = 8000) {
     private val database = Database()
 
     private fun reloadFromWAL() {
-        for (f in Utils.readFilesFrom(GeneralWriter.FOLDER) { it.startsWith(WALWriter.WAL_PREFIX) }) {
+        for (f in Utils.readFilesFrom(FOLDER) { it.startsWith(WALWriter.WAL_PREFIX) }) {
             database.recoverFromWal(f)
         }
     }
