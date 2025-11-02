@@ -47,7 +47,7 @@ abstract class GeneralWriter(protected val fos: FileOutputStream) : Closeable {
     protected val fc: FileChannel = fos.channel
 
     // write a record to disk
-    abstract fun write(op: DBRecord)
+    abstract fun write(record: DBRecord)
 
     protected fun writeKeySharingPrefix(key: String) {
         val bytes = key.toByteArray()
@@ -155,7 +155,6 @@ class SegmentWriter(val level: Int, fos: FileOutputStream = FileOutputStream("$F
     init {
         pointer = 0
         filter = Bloom(BLOOM_FILTER_SIZE, seed = currentID.toLong())
-        blocksOffset.clear()
         writeHeader()
     }
 
@@ -164,25 +163,28 @@ class SegmentWriter(val level: Int, fos: FileOutputStream = FileOutputStream("$F
         for (entry in table) {
             write(entry.value)
         }
+        if (blocksOffset.isEmpty()) {
+            blocksOffset += Pair(firstKeyOfCurrentBlock!!, pointer)
+        }
         log.info("Memtable all written to $currentPath")
         return currentPath
     }
 
-    override fun write(op: DBRecord) {
-        filter.add(op.key) // insert it to the bloom filter
-        write(op, sharePrefix)
+    override fun write(record: DBRecord) {
+        filter.add(record.key) // insert it to the bloom filter
+        write(record, sharePrefix)
         // start sharing prefix
         sharePrefix = true
 
         if (firstKeyOfCurrentBlock == null) {
-            firstKeyOfCurrentBlock = op.key
+            firstKeyOfCurrentBlock = record.key
         }
 
         if (firstKeyOfSegment == null) {
-            firstKeyOfSegment = op.key
+            firstKeyOfSegment = record.key
         }
 
-        lastKeyOfSegment = op.key
+        lastKeyOfSegment = record.key
 
         // the current block is full, need to create a new block
         if (fc.position() - pointer >= Config.BLOCK_SIZE) {
@@ -297,17 +299,29 @@ class WALWriter: GeneralWriter {
     }
 }
 
-class VerfWriter {
+class VerfWriter(private val startVersion: Int = 0) {
     companion object {
         private const val VERF = "verf"
     }
-    private val fos: FileOutputStream = FileOutputStream("$FOLDER/$VERF")
-    fun write(version: Int, segments: List<Segment>) {
-        fos.write(1) // means there are more versions to be read
-        fos.writeVInt(version)
-        fos.writeVInt(segments.size)
-        for (segment in segments) {
-            fos.writeVInt(segment.id)
+    private val file: File = File("$FOLDER/$VERF")
+    private val fos: FileOutputStream = FileOutputStream(file, true)
+
+    init {
+        if (file.length() == 0L) {
+            fos.write(startVersion)
         }
+    }
+
+    fun write(version: Int, segments: List<Segment>) {
+        fos.write('\n'.code) // end of last version
+        fos.write(version)
+        for (segment in segments) {
+            write(segment)
+        }
+    }
+
+    fun write(segment: Segment) {
+        fos.write('#'.code)
+        fos.writeVInt(segment.id)
     }
 }

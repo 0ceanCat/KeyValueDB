@@ -58,15 +58,10 @@ fun ByteBuffer.writeMode() {
 }
 
 fun ByteBuffer.readString(): String {
-    val kLen = readVInt()
-    val slice = slice(position(), kLen)
-    val bytes = ByteArray(slice.remaining())
-    slice.get(bytes)
-    position(position() + kLen)
-    return String(bytes, Charsets.UTF_8)
+    return String(readStringAsBytes(), Charsets.UTF_8)
 }
 
-fun ByteBuffer.readBytes(): ByteArray {
+fun ByteBuffer.readStringAsBytes(): ByteArray {
     val vLen = readVInt()
     val vBytes = ByteArray(vLen)
     get(vBytes)
@@ -120,7 +115,7 @@ open class MetadataReader(private val fChannel: FileChannel) {
         val firstKey = bigBuffer.readString()
         val lastKey = bigBuffer.readString()
 
-        val blocksIndex = readBlocksIndex(bigBuffer, (filterOffset - blocksIndexOffset).toInt(), filterOffset)
+        val blocksIndex = readBlocksIndex(bigBuffer, (filterOffset - blocksIndexOffset).toInt(), keyRangeOffset)
 
         // read filter
         val bloom = readFilter(bigBuffer)
@@ -133,7 +128,8 @@ open class MetadataReader(private val fChannel: FileChannel) {
     private fun readBlocksIndex(byteBuffer: ByteBuffer, blockIndexSize: Int, lastBlockEndOffset: Long): TreeMap<String, OffsetRange> {
         val blocksIndex = TreeMap<String, OffsetRange>()
         val blocksOffsetList = mutableListOf<Pair<String, Long>>()
-        while (byteBuffer.position() < blockIndexSize) {
+        val blockIndexEndOffset = byteBuffer.position() + blockIndexSize
+        while (byteBuffer.position() < blockIndexEndOffset) {
             val key = byteBuffer.readString()
             blocksOffsetList += key to byteBuffer.readVLong()
         }
@@ -184,9 +180,8 @@ open class BlockReader(private val fChannel: FileChannel, private val offsetRang
 
     private fun readPrefixSharedString(byteBuffer: ByteBuffer): String {
         val prefixSize = byteBuffer.readVInt()
-        val kLen = byteBuffer.readVInt()
-        val kBytes = byteBuffer.slice(byteBuffer.position(), kLen).array()
-        val currentBytes = lastString.sliceArray(0 until prefixSize) + kBytes
+        val bytes = byteBuffer.readStringAsBytes()
+        val currentBytes = lastString.sliceArray(0 until prefixSize) + bytes
         val key = String(currentBytes)
         lastString = currentBytes
         return key
@@ -196,14 +191,14 @@ open class BlockReader(private val fChannel: FileChannel, private val offsetRang
         return if (meta.vType == DataType.INT) {
             byteBuffer.readVInt()
         } else {
-            byteBuffer.readBytes()
+            byteBuffer.readStringAsBytes()
         }
     }
 
 
     private fun readBlocksToByteBuffer(): ByteBuffer {
         val (startOffset, endOffset) = offsetRange
-        val blockBuffer = ByteBuffer.allocate((endOffset - startOffset).toInt())
+        val blockBuffer = ByteBuffer.allocate((endOffset - startOffset + 1).toInt())
         fChannel.read(blockBuffer, startOffset)
         blockBuffer.readMode()
         return blockBuffer
@@ -279,7 +274,7 @@ open class WalReader(file: File): Iterable<DBRecord>, Closeable {
     }
 }
 
-class VerFReader {
+class VerFReader: Closeable {
     companion object {
         private const val VERF = "verf"
     }
@@ -303,15 +298,19 @@ class VerFReader {
 
     private fun readVersion(): Pair<Int, Set<Int>>? {
         val result = mutableSetOf<Int>()
-        val hasMore = fis.read()
-        if (hasMore == 1) {
-            val version = fis.readVInt()
-            val nOfSegments = fis.readVInt()
-            repeat(nOfSegments) {
-                result += fis.readVInt()
-            }
-            return version to result
+        val version = fis.read()
+        if (version == -1) {
+            return null
         }
-        return null
+        var hasMore = fis.read()
+        while (hasMore == '#'.code) {
+            result += fis.readVInt()
+            hasMore = fis.read()
+        }
+        return version to result
+    }
+
+    override fun close() {
+        fis.close()
     }
 }

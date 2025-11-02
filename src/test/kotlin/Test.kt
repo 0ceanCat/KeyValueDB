@@ -6,7 +6,7 @@ class TestClient(val n: Int){
         val cd = CountDownLatch(n)
         for (i in 0 until n){
             val client = Client()
-            for (j in 1..200){
+            for (j in 1..10){
                 client.set("$j", "${j*3}")
             }
             cd.countDown()

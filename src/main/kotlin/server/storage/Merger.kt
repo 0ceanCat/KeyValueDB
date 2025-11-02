@@ -45,7 +45,6 @@ object Merger : Thread() {
                 }
             }
 
-
             try {
                 lock.lock()
                 cond.await()
